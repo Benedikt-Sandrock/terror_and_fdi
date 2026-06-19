@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "terror_and_fdi"
+version = "0.1.0"
+description = "FDI and the Geography of Terror"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "pandas",
+    "matplotlib",
+    "country_converter",
+    "global_macro_data"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

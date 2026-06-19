@@ -1,0 +1,4 @@
+pandas
+matplotlib
+country_converter
+global_macro_data

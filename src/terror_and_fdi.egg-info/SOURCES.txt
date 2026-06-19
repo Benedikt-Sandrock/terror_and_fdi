@@ -1,0 +1,12 @@
+pyproject.toml
+src/terror_and_fdi/__init__.py
+src/terror_and_fdi.egg-info/PKG-INFO
+src/terror_and_fdi.egg-info/SOURCES.txt
+src/terror_and_fdi.egg-info/dependency_links.txt
+src/terror_and_fdi.egg-info/requires.txt
+src/terror_and_fdi.egg-info/top_level.txt
+src/terror_and_fdi/config/__init__.py
+src/terror_and_fdi/config/paths.py
+src/terror_and_fdi/config/settings.py
+src/terror_and_fdi/utils/__init__.py
+src/terror_and_fdi/utils/io.py
