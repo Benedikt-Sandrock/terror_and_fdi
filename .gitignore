@@ -1,3 +1,5 @@
 .venv/
 .idea/
 __pycache__
+/src/terror_and_fdi.egg-info/
+/data/raw/

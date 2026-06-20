@@ -12,7 +12,8 @@ dependencies = [
     "pandas",
     "matplotlib",
     "country_converter",
-    "global_macro_data"
+    "global_macro_data",
+    "requests"
 ]
 
 [tool.setuptools.packages.find]
