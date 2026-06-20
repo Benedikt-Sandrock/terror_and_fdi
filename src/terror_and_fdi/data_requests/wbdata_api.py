@@ -15,6 +15,7 @@ vars_wdi = {
     "gdp_per_capita_current": "NY.GDP.PCAP.CD",  # GDP per capita (current US$)
     "gdp_deflator": "NY.GDP.DEFL.KD.ZG",  # Annual GDP deflator (inflation, GDP deflator annual %)
     "gfkf_percent": "NE.GDI.FTOT.ZS",  # Gross fixed capital formation (% of GDP)
+    "gfkf_privat": "NE.GDI.FPRV.ZS", # Gross fixed capital formation by private sector (% of GDP)
     "natural_resources_rents": "NY.GDP.TOTL.RT.ZS",  # Total natural resources rents (% of GDP)
     # --- Trade & FDI ---
     "fdi_inflow_percent": "BX.KLT.DINV.WD.GD.ZS",  # Foreign direct investment, net inflows (% of GDP)

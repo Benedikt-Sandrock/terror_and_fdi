@@ -3,4 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 
 DATA = ROOT / "data"
-RAW = DATA / "RAW"
+RAW = DATA / "raw"
+PROCESSED = DATA / "processed"
+INTERIM = DATA / "interim"
+
