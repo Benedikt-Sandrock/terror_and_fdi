@@ -7016,7 +7016,6 @@ year,sb_exist,sb_intrastate_exist,sb_interstate_exist,ISO3
 2023,0,0,0,VNM
 2024,0,0,0,VNM
 2025,0,0,0,VNM
-1989,0,0,0,YEM
 1990,0,0,0,YEM
 1991,0,0,0,YEM
 1992,0,0,0,YEM
@@ -7054,7 +7053,6 @@ year,sb_exist,sb_intrastate_exist,sb_interstate_exist,ISO3
 2024,1,1,1,YEM
 2025,1,1,1,YEM
 1989,0,0,0,YEM
-1990,0,0,0,YEM
 1989,0,0,0,ZMB
 1990,0,0,0,ZMB
 1991,0,0,0,ZMB

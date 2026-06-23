@@ -16,6 +16,7 @@ dependencies = [
     "requests",
     "openpyxl",
     "pyarrow",
+    "pyreadstat",
 ]
 
 [tool.setuptools.packages.find]

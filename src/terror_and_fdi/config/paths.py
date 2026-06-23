@@ -6,4 +6,4 @@ DATA = ROOT / "data"
 RAW = DATA / "raw"
 PROCESSED = DATA / "processed"
 INTERIM = DATA / "interim"
-
+STATA = INTERIM / "stata"

@@ -20,6 +20,7 @@ df_filtered = df[(df['year'] >= start_year) & (df['year'] <= end_year)]
 
 df_filtered = df_filtered.sort_values(by=['ISO3', 'year']).reset_index(drop=True)
 df_filtered["year"] = df_filtered["year"].astype(int)
-df_filtered = df_filtered.drop(columns="id")
+df_filtered = df_filtered.drop(columns=["id", "countryname"])
+print(df_filtered.columns)
 
 df_filtered.to_csv(OUTPUT_FILE, index = False)

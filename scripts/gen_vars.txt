@@ -1,0 +1,88 @@
+gen ln_incidents_total = ln(incidents_total +1)
+gen ln_fatalities_total = ln(fatalities_total +1)
+gen ln_wounded_total = ln(wounded_total +1)
+gen ln_casualties_total = ln(casualties_total +1)
+gen ln_casualties_capital = ln(casualties_capital +1)
+gen ln_casualties_no_capital = ln(casualties_no_capital +1)
+gen ln_incidents_capital = ln(incidents_capital +1)
+gen ln_casualties_top3 = ln(casualties_top3 +1)
+gen ln_casualties_no_top3 = ln(casualties_no_top3 +1)
+gen ln_incidents_top3 = ln(incidents_top3 +1)
+gen ln_cas_capital_business = ln(cas_capital_business +1)
+gen ln_cas_capital_nonbusiness = ln(cas_capital_nonbusiness +1)
+gen ln_cas_nocapital_business = ln(cas_nocapital_business +1)
+gen ln_cas_nocapital_nonbusiness = ln(cas_nocapital_nonbusiness +1)
+gen ln_inc_capital_business = ln(inc_capital_business +1)
+gen ln_inc_capital_nonbusiness = ln(inc_capital_nonbusiness +1)
+gen ln_cas_top3_business = ln(cas_top3_business +1)
+gen ln_cas_top3_nonbusiness = ln(cas_top3_nonbusiness +1)
+gen ln_cas_notop3_business = ln(cas_notop3_business +1)
+gen ln_cas_notop3_nonbusiness = ln(cas_notop3_nonbusiness +1)
+gen ln_inc_top3_business = ln(inc_top3_business +1)
+gen ln_inc_top3_nonbusiness = ln(inc_top3_nonbusiness +1)
+label var ln_incidents_total "ln(incidents_total)"
+label var ln_fatalities_total "ln(fatalities_total)"
+label var ln_wounded_total "ln(wounded_total)"
+label var ln_casualties_total "ln(casualties_total)"
+label var ln_casualties_capital "ln(casualties_capital)"
+label var ln_casualties_no_capital "ln(casualties_no_capital)"
+label var ln_incidents_capital "ln(incidents_capital)"
+label var ln_casualties_top3 "ln(casualties_top3)"
+label var ln_casualties_no_top3 "ln(casualties_no_top3)"
+label var ln_incidents_top3 "ln(incidents_top3)"
+label var ln_cas_capital_business "ln(cas_capital_business)"
+label var ln_cas_capital_nonbusiness "ln(cas_capital_nonbusiness)"
+label var ln_cas_nocapital_business "ln(cas_nocapital_business)"
+label var ln_cas_nocapital_nonbusiness "ln(cas_nocapital_nonbusiness)"
+label var ln_inc_capital_business "ln(inc_capital_business)"
+label var ln_inc_capital_nonbusiness "ln(inc_capital_nonbusiness)"
+label var ln_cas_top3_business "ln(cas_top3_business)"
+label var ln_cas_top3_nonbusiness "ln(cas_top3_nonbusiness)"
+label var ln_cas_notop3_business "ln(cas_notop3_business)"
+label var ln_cas_notop3_nonbusiness "ln(cas_notop3_nonbusiness)"
+label var ln_inc_top3_business "ln(inc_top3_business)"
+label var ln_inc_top3_nonbusiness "ln(inc_top3_nonbusiness)"
+gen incidents_total_pc = incidents_total / population_total
+gen fatalities_total_pc = fatalities_total / population_total
+gen wounded_total_pc = wounded_total / population_total
+gen casualties_total_pc = casualties_total / population_total
+gen casualties_capital_pc = casualties_capital / population_total
+gen casualties_no_capital_pc = casualties_no_capital / population_total
+gen incidents_capital_pc = incidents_capital / population_total
+gen casualties_top3_pc = casualties_top3 / population_total
+gen casualties_no_top3_pc = casualties_no_top3 / population_total
+gen incidents_top3_pc = incidents_top3 / population_total
+gen cas_capital_business_pc = cas_capital_business / population_total
+gen cas_capital_nonbusiness_pc = cas_capital_nonbusiness / population_total
+gen cas_nocapital_business_pc = cas_nocapital_business / population_total
+gen cas_nocapital_nonbusiness_pc = cas_nocapital_nonbusiness / population_total
+gen inc_capital_business_pc = inc_capital_business / population_total
+gen inc_capital_nonbusiness_pc = inc_capital_nonbusiness / population_total
+gen cas_top3_business_pc = cas_top3_business / population_total
+gen cas_top3_nonbusiness_pc = cas_top3_nonbusiness / population_total
+gen cas_notop3_business_pc = cas_notop3_business / population_total
+gen cas_notop3_nonbusiness_pc = cas_notop3_nonbusiness / population_total
+gen inc_top3_business_pc = inc_top3_business / population_total
+gen inc_top3_nonbusiness_pc = inc_top3_nonbusiness / population_total
+label var incidents_total_pc "incidents_total per capita"
+label var fatalities_total_pc "fatalities_total per capita"
+label var wounded_total_pc "wounded_total per capita"
+label var casualties_total_pc "casualties_total per capita"
+label var casualties_capital_pc "casualties_capital per capita"
+label var casualties_no_capital_pc "casualties_no_capital per capita"
+label var incidents_capital_pc "incidents_capital per capita"
+label var casualties_top3_pc "casualties_top3 per capita"
+label var casualties_no_top3_pc "casualties_no_top3 per capita"
+label var incidents_top3_pc "incidents_top3 per capita"
+label var cas_capital_business_pc "cas_capital_business per capita"
+label var cas_capital_nonbusiness_pc "cas_capital_nonbusiness per capita"
+label var cas_nocapital_business_pc "cas_nocapital_business per capita"
+label var cas_nocapital_nonbusiness_pc "cas_nocapital_nonbusiness per capita"
+label var inc_capital_business_pc "inc_capital_business per capita"
+label var inc_capital_nonbusiness_pc "inc_capital_nonbusiness per capita"
+label var cas_top3_business_pc "cas_top3_business per capita"
+label var cas_top3_nonbusiness_pc "cas_top3_nonbusiness per capita"
+label var cas_notop3_business_pc "cas_notop3_business per capita"
+label var cas_notop3_nonbusiness_pc "cas_notop3_nonbusiness per capita"
+label var inc_top3_business_pc "inc_top3_business per capita"
+label var inc_top3_nonbusiness_pc "inc_top3_nonbusiness per capita"

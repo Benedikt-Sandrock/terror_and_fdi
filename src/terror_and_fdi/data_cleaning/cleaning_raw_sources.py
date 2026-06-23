@@ -6,7 +6,7 @@ import pandas as pd
 import country_converter as coco
 import logging
 import time
-from terror_and_fdi.config import RAW, INTERIM
+from terror_and_fdi.config import RAW, INTERIM, STATA
 
 # ==============================================================
 # CONFIGURATION
@@ -16,19 +16,21 @@ CLEAN_V_DEM = False
 CLEAN_PWT = False
 CLEAN_TAX = False
 CLEAN_UCDP = False
-CLEAN_WORLD_BANK = False
+CLEAN_WORLD_BANK = True
 CLEAN_WORLD_CITIES = False
-CLEAN_GTD = True
+CLEAN_GTD = False
+CLEAN_METADATA = True
+
+CONVERT_TO_DTA = True
 
 logging.getLogger('country_converter').setLevel(logging.CRITICAL)
 cc = coco.CountryConverter()
 
-# ==============================================================
 # V-DEM
-# ==============================================================
 if CLEAN_V_DEM:
     V_DEM_INPUT = RAW / "v_dem" / "v_dem_core_v16.csv"
     V_DEM_OUTPUT = INTERIM / "v_dem_processed.csv"
+    V_DEM_STATA = STATA / "v_dem_processed.dta"
 
     V_DEM_VARS_DICT = [
         {
@@ -101,10 +103,7 @@ if CLEAN_V_DEM:
 
     v_dem_df.to_csv(V_DEM_OUTPUT, index = False)
 
-
-# ==============================================================
 # PWT - HUMAN CAPITAL
-# ==============================================================
 if CLEAN_PWT:
     PWT_INPUT = RAW / "pwt" / "pwt110.xlsx"
     PWT_OUTPUT = INTERIM / "pwt_processed.csv"
@@ -113,10 +112,7 @@ if CLEAN_PWT:
     pwt_df = pwt_df.rename(columns = {"countrycode": "ISO3"})
     pwt_df.to_csv(PWT_OUTPUT, index = False)
 
-
-# ==============================================================
 # TAX FOUNDATION
-# ==============================================================
 if CLEAN_TAX:
     TAX_INPUT = RAW / "tax_foundation" / "rates_final.csv"
     TAX_OUTPUT = INTERIM / "stat_tax_rate_processed.csv"
@@ -131,10 +127,7 @@ if CLEAN_TAX:
     tax_df = tax_df.sort_values(by = "iso_3").rename(columns = {"iso_3": "ISO3"})
     tax_df.to_csv(TAX_OUTPUT, index = False)
 
-
-# ==============================================================
 # UCDP
-# ==============================================================
 if CLEAN_UCDP:
     UCDP_INPUT = RAW / "ucdpprio" / "OrganizedViolenceCYDataSet26_1.csv"
     UCDP_OUTPUT = INTERIM / "state_based_violence_processed.csv"
@@ -144,13 +137,11 @@ if CLEAN_UCDP:
     df = df[~df["country"].str.contains("German Democratic Republic")]
     df["ISO3"] = cc.convert(names = df["country"], to = "ISO3")
     df = df.drop(columns = "country")
+    df = df.drop_duplicates()
 
     df.to_csv(UCDP_OUTPUT, index = False)
 
-
-# ==============================================================
 # WORLD BANK
-# ==============================================================
 if CLEAN_WORLD_BANK:
     WORLD_BANK_INPUT = RAW / "world_bank" / "wb_data.csv"
     WORLD_BANK_OUTPUT = INTERIM / "wb_data_processed.csv"
@@ -158,15 +149,12 @@ if CLEAN_WORLD_BANK:
     df = pd.read_csv(WORLD_BANK_INPUT)
     df["ISO3"] = cc.convert(names = df["country_code"], to = "ISO3")
     df = df.drop(columns= ["country", "country_code"])
+    df = df[df["ISO3"] != "not found"]
 
     df.to_csv(WORLD_BANK_OUTPUT, index = False)
 
-
-# ==============================================================
 # WORLD CITIES
-# ==============================================================
 CITIES_OUTPUT_PATH = INTERIM / "cities_processed.csv"
-
 if CLEAN_WORLD_CITIES:
     CITIES_INPUT_PATH = RAW / "worldcities.csv"
     COLS_CITIES = ["city_ascii", "iso3", "capital", "population"]
@@ -179,14 +167,21 @@ if CLEAN_WORLD_CITIES:
 
     df_cities.to_csv(CITIES_OUTPUT_PATH, index = False)
 
+# METADATA
+if CLEAN_METADATA:
+    METADATA_INPUT_PATH = RAW / "country_metadata.csv"
+    METADATA_OUTPUT_PATH = INTERIM / "country_metadata_processed.csv"
 
-# ==============================================================
+    df = pd.read_csv(METADATA_INPUT_PATH, sep= ";", usecols = ["Code", "Income Group", "Region"])
+    df = df.rename(columns= {"Code": "ISO3", "Income Group": "income_group", "Region": "region"})
+
+    df.to_csv(METADATA_OUTPUT_PATH, index = False)
+
 # GTD
-# ==============================================================
 if CLEAN_GTD:
     start_time = time.perf_counter()
     GTD_INPUT_PATH = RAW / "gtd" / "gtd.csv"
-    GTD_OUTPUT_PATH = INTERIM / "gtd_processed.cscv"
+    GTD_OUTPUT_PATH = INTERIM / "gtd_processed.csv"
 
     VARS_GTD = [
         {
@@ -354,6 +349,7 @@ if CLEAN_GTD:
     ).reset_index()
 
     panel_df = panel_df.rename(columns = {"iyear": "year"})
+
     all_years = range(panel_df["year"].min(), panel_df["year"].max() + 1)
     all_countries = panel_df["country_txt"].unique()
 
@@ -377,3 +373,18 @@ if CLEAN_GTD:
     end_time = time.perf_counter()
     duration = end_time - start_time
     print(f"GTD cleaning takes {duration} seconds to run.")
+
+# CONVERT TO DTA
+if CONVERT_TO_DTA:
+    INPUT_DIR = INTERIM
+    OUTPUT_DIR = STATA
+
+    csv_files = list(INPUT_DIR.glob("*.csv"))
+    print(f"{len(csv_files)} csv files found to convert to .dta")
+
+    for csv_path in csv_files:
+        df = pd.read_csv(csv_path)
+        dta_filename = csv_path.stem + ".dta"
+        dta_path = OUTPUT_DIR / dta_filename
+
+        df.to_stata(dta_path, write_index = False, version = 118)

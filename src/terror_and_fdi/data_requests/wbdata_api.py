@@ -17,6 +17,8 @@ vars_wdi = {
     "gfkf_percent": "NE.GDI.FTOT.ZS",  # Gross fixed capital formation (% of GDP)
     "gfkf_privat": "NE.GDI.FPRV.ZS", # Gross fixed capital formation by private sector (% of GDP)
     "natural_resources_rents": "NY.GDP.TOTL.RT.ZS",  # Total natural resources rents (% of GDP)
+    "population_share_largest_city": "EN.URB.LCTY.UR.ZS", # Share of population in largest city
+    "population_total": "SP.POP.TOTL", # Total population
     # --- Trade & FDI ---
     "fdi_inflow_percent": "BX.KLT.DINV.WD.GD.ZS",  # Foreign direct investment, net inflows (% of GDP)
     "fdi_inflow_abs": "BX.KLT.DINV.CD.WD",  # Foreign direct investment, net inflows (BoP, current US$)
