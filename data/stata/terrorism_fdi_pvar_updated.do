@@ -60,12 +60,13 @@ log using "terrorism_fdi_pvar_log.smcl", replace
 *-------------------------------------------------------------------------------
 * 0. PACKAGE INSTALLATION (run once)
 *-------------------------------------------------------------------------------
-/*
+
 cap ssc install pvar
 cap ssc install xtwest
 cap ssc install moremata
 cap ssc install xtcd2
-*/
+cap ssc install pescadf
+
 
 *===============================================================================
 * 1. DATA IMPORT AND PANEL STRUCTURE
@@ -243,25 +244,9 @@ label var inc_top3_nonbusiness_pc "inc_top3_nonbusiness per capita"
 
 
 
-* PRIMARY FDI-relevant measure: attacks on business targets in major
-* economic centers (top-3 cities, which typically includes the capital)
-gen terror_econ_business     = cas_top3_business
-gen terror_econ_business_ln  = ln(1 + terror_econ_business)
-
-
-gen terror_econ_incidents    = inc_top3_business
-gen terror_econ_incidents_ln = ln(1 + terror_econ_incidents)
-
-* Disaggregated alternatives for the robustness battery (Section 12)
-gen terror_cap_business_ln    = ln(1 + cas_capital_business)
-gen terror_cap_nonbus_ln      = ln(1 + cas_capital_nonbusiness)
-gen terror_nocap_business_ln  = ln(1 + cas_nocapital_business)
-gen terror_top3_nonbus_ln     = ln(1 + cas_top3_nonbusiness)
-gen terror_notop3_business_ln = ln(1 + cas_notop3_business)
-gen terror_capital_ln         = ln(1 + casualties_capital)
-gen terror_top3_ln            = ln(1 + casualties_top3)
-gen terror_nocapital_ln       = ln(1 + casualties_no_capital)
-gen terror_notop3_ln          = ln(1 + casualties_no_top3)
+* PRIMARY FDI-relevant measure: casualties in the capital
+* MAIN VARIABLE: ln_casualties_capital
+* COMPARISON TO: ln_casualties_nocapital
 
 
 * --- 2.2 FDI (sign-preserving IHS transform: values can be negative) ---
@@ -281,7 +266,7 @@ bysort ccode (year): gen gdp_growth = ///
     if ccode == ccode[_n-1]
 
 * Trade openness - already provided directly; cross-check against components
-* trade_share is taken from the WDI. trade_share_gmd is constructed from 
+* trade_share_gmd is taken from the WDI. trade_share_gmd is constructed from 
 * single components by GMD.
 gen trade_share_gmd = exports_GDP + imports_GDP
 correlate trade_share trade_share_gmd
@@ -334,21 +319,26 @@ gen highterror = (casualties_total > terror_p50)
 *===============================================================================
 * 3. DESCRIPTIVE STATISTICS
 *===============================================================================
-* count observations per country, drop Andorra and South Sudan with 4 and 2 observations.
+* count observations per country; drop Andorra and South Sudan with 2 and 4 
+* observations, respectively.
 bys ccode: egen T = count(fdi_in_ihs)
+tab country_txt T if T < 10
 drop if T < 10
 
+xtsum casualties_capital casualties_no_capital fdi_inflow_percent
+xtsum ln_casualties_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline
+sum   ln_casualties_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline, detail
 
-xtsum terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation instit_baseline
-sum   terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation instit_baseline, detail
+count if casualties_capital == 0
+display "Share of country-years with zero casualties in the capital: " r(N)/_N
 
-count if cas_top3_business == 0
-display "Share of country-years with zero business-target attacks in top-3 cities: " r(N)/_N
+count if casualties_no_capital == 0
+display "Share of country-years with zero casualties oztside the capital: " r(N)/_N
 
 count if incidents_total == 0
 display "Share of country-years with zero attacks (any type): " r(N)/_N
 
-correlate terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation instit_baseline
+correlate ln_casualties_capital ln_casualties_no_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline
 
 list ISO3 year gdp_per_capita_constant gdp_growth if abs(gdp_growth) > 50 & !missing(gdp_growth)
 
@@ -356,44 +346,42 @@ list ISO3 year gdp_per_capita_constant gdp_growth if abs(gdp_growth) > 50 & !mis
 * 4. PANEL UNIT ROOT TESTS
 *===============================================================================
 * Test for cross-sectional-dependence first
-xtcd2 terror_econ_business_ln
+xtcd2 ln_casualties_capital
 xtcd2 fdi_in_ihs
 xtcd2 gdp_growth
 xtcd2 trade_share_gmd
 xtcd2 lninflation
 xtcd2 instit_baseline
 
+xtcdf ln_casualties_capital ln_casualties_no_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline
 
-foreach v in terror_econ_business_ln fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline {
-    display "=== Unit root tests for `v' (levels) ==="
-    xtunitroot ips `v'
-    xtunitroot fisher `v', dfuller lags(2)
+foreach v in ln_casualties_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline {
+    di "----------------──────────────────────────────────"
+    di "CIPS Test (2nd Gen) für: `v'"
+    di "----------------────────────────────────────────--"
+    
+    pescadf `v', lags(2)
 }
 
-foreach v in terror_econ_business_ln fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline {
-    bysort ccode (year): gen d_`v' = `v' - `v'[_n-1] if ccode == ccode[_n-1]
-}
+*instit_baseline is non-stationary. Create first difference and test again
+gen d_instit = D.instit_baseline
 
-foreach v in d_terror_econ_business_ln d_fdi_in_ihs d_gdp_growth d_trade_share_gmd d_lninflation d_instit_baseline {
-    display "=== Unit root tests for `v' (first difference) ==="
-    xtunitroot ips `v'
-}
-
+pescadf d_instit, lags(2)
 
 *===============================================================================
 * 5. PANEL COINTEGRATION TESTS  (only if levels are I(1) - requires Stata 16+)
 *===============================================================================
 
-xtcointtest pedroni fdi_in_ihs terror_econ_business_ln gdp_growth trade_share lninflation instit_baseline, ardl
-xtcointtest kao     fdi_in_ihs terror_econ_business_ln gdp_growth trade_share lninflation instit_baseline
-xtwest      fdi_in_ihs terror_econ_business_ln gdp_growth trade_share lninflation instit_baseline, lags(2) leads(2) constant
+xtcointtest pedroni fdi_in_ihs ln_casualties_capital gdp_growth trade_share_gmd lninflation instit_baseline, ardl
+xtcointtest kao     fdi_in_ihs ln_casualties_capital gdp_growth trade_share_gmd lninflation instit_baseline
+xtwest      fdi_in_ihs ln_casualties_capital gdp_growth trade_share_gmd lninflation instit_baseline, lags(2) leads(2) constant
 
 
 *===============================================================================
 * 6. LAG ORDER SELECTION
 *===============================================================================
 
-pvarsoc terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation instit_baseline, ///
+pvarsoc ln_casualties_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline, ///
     pvaropts(instlags(1/2) gmmstyle) maxlag(4)
 
 
@@ -404,7 +392,12 @@ pvarsoc terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation in
 * top of file on instrument proliferation. Compare to instlags(1/4) in
 * Section 12.7 as a robustness check.
 
-pvar terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation instit_baseline, ///
+xtabond2 fdi_in_ihs L.fdi_in_ihs L.ln_casualties_capital L.ln_casualties_no_capital gdp_growth, ///
+    gmm(L.fdi_in_ihs L.ln_casualties_capital, lag(2 .)) ///
+    iv(gdp_growth trade_share_gmd lninflation instit_baseline) ///
+    twostep robust
+
+pvar ln_casualties_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline, ///
     lags(2) instlags(1/2) fod gmmstyle overid
 
 estimates store pvar_baseline
@@ -433,14 +426,14 @@ pvargranger
 * shocks affect terrorism only with a lag). Stress-tested in Section 12.2.
 
 pvarirf, mc(200) level(95) ///
-    impulse(terror_econ_business_ln) response(fdi_in_ihs) ///
+    impulse(ln_casualties_capital) response(fdi_in_ihs) ///
     figopts(title("IRF: Business-target terrorism shock {&rarr} FDI") ///
             xtitle("Years") ytitle(""))
 
 pvarirf, mc(200) level(95) oirf table
 
 pvarfevd, ///
-    impulse(terror_econ_business_ln) response(fdi_in_ihs) ///
+    impulse(ln_casualties_capital) response(fdi_in_ihs) ///
     figopts(title("FEVD: Share of FDI variance from terrorism shocks"))
 
 
@@ -451,33 +444,33 @@ pvarfevd, ///
 * --- 11.1 Resource-rich vs resource-poor (cf. Aslan et al. oil split) ---
 foreach r in 0 1 {
     display "=== PVAR for resource_rich = `r' ==="
-    cap pvar terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation instit_baseline ///
+    cap pvar ln_casualties_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline ///
         if resource_rich == `r', lags(2) instlags(1/2) fod gmmstyle
-    cap pvarirf, mc(200) level(95) impulse(terror_econ_business_ln) response(fdi_in_ihs)
+    cap pvarirf, mc(200) level(95) impulse(ln_casualties_capital) response(fdi_in_ihs)
 }
 
 * --- 11.2 Income tier (proxy, no WB classification available) ---
 foreach t in 1 2 3 {
     display "=== PVAR for income_tercile = `t' ==="
-    cap pvar terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation instit_baseline ///
+    cap pvar ln_casualties_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline ///
         if income_tercile == `t', lags(2) instlags(1/2) fod gmmstyle
-    cap pvarirf, mc(200) level(95) impulse(terror_econ_business_ln) response(fdi_in_ihs)
+    cap pvarirf, mc(200) level(95) impulse(ln_casualties_capital) response(fdi_in_ihs)
 }
 
 * --- 11.3 Armed-conflict exposure (sb_exist) ---
 foreach c in 0 1 {
     display "=== PVAR for sb_exist = `c' ==="
-    cap pvar terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation instit_baseline ///
+    cap pvar ln_casualties_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline ///
         if sb_exist == `c', lags(2) instlags(1/2) fod gmmstyle
-    cap pvarirf, mc(200) level(95) impulse(terror_econ_business_ln) response(fdi_in_ihs)
+    cap pvarirf, mc(200) level(95) impulse(ln_casualties_capital) response(fdi_in_ihs)
 }
 
 * --- 11.4 High vs low terrorism exposure (median split) ---
 foreach h in 0 1 {
     display "=== PVAR for highterror = `h' ==="
-    cap pvar terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation instit_baseline ///
+    cap pvar ln_casualties_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline ///
         if highterror == `h', lags(2) instlags(1/2) fod gmmstyle
-    cap pvarirf, mc(200) level(95) impulse(terror_econ_business_ln) response(fdi_in_ihs)
+    cap pvarirf, mc(200) level(95) impulse(ln_casualties_capital) response(fdi_in_ihs)
 }
 
 * --- 11.5 Optional regional split - requires merging a region crosswalk first ---
@@ -496,7 +489,7 @@ foreach tvar in terror_incidents_ln terror_fatalities_ln terror_casualties_ln //
                 terror_nocap_business_ln terror_top3_nonbus_ln terror_notop3_business_ln ///
                 terror_capital_ln terror_top3_ln terror_nocapital_ln terror_notop3_ln {
     display "=== Robustness: terrorism proxy = `tvar' ==="
-    cap pvar `tvar' fdi_in_ihs gdp_growth trade_share lninflation instit_baseline, ///
+    cap pvar `tvar' fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline, ///
         lags(2) instlags(1/2) fod gmmstyle
     cap pvarirf, mc(200) level(95) impulse(`tvar') response(fdi_in_ihs)
 }
@@ -506,55 +499,55 @@ foreach tvar in terror_incidents_ln terror_fatalities_ln terror_casualties_ln //
 * "any violence reduces FDI" story.
 
 * --- 12.2 Alternative Cholesky ordering ---
-pvar fdi_in_ihs gdp_growth trade_share lninflation instit_baseline terror_econ_business_ln, ///
+pvar fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline ln_casualties_capital, ///
     lags(2) instlags(1/2) fod gmmstyle
-pvarirf, mc(200) level(95) impulse(terror_econ_business_ln) response(fdi_in_ihs)
+pvarirf, mc(200) level(95) impulse(ln_casualties_capital) response(fdi_in_ihs)
 
 * --- 12.3 Alternative FDI measures ---
-pvar terror_econ_business_ln fdi_out_ihs gdp_growth trade_share lninflation instit_baseline, ///
+pvar ln_casualties_capital fdi_out_ihs gdp_growth trade_share_gmd lninflation instit_baseline, ///
     lags(2) instlags(1/2) fod gmmstyle
-pvar terror_econ_business_ln fdi_in_abs_ihs gdp_growth trade_share lninflation instit_baseline, ///
+pvar ln_casualties_capital fdi_in_abs_ihs gdp_growth trade_share_gmd lninflation instit_baseline, ///
     lags(2) instlags(1/2) fod gmmstyle
 
 * --- 12.4 Alternative institutional quality measures ---
 foreach ivar in v2x_rule v2x_libdem v2x_accountability {
     display "=== Robustness: institution proxy = `ivar' (full sample, V-Dem) ==="
-    cap pvar terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation `ivar', ///
+    cap pvar ln_casualties_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation `ivar', ///
         lags(2) instlags(1/2) fod gmmstyle
 }
 * Post-1996 WGI subsample only (coverage constraint - see notes at top).
 * Do NOT use `pv' here - it is mechanically contaminated by violence data.
 foreach ivar in cc ge rl rq va {
     display "=== Robustness: institution proxy = `ivar' (WGI, post-1996 subsample) ==="
-    cap pvar terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation `ivar' ///
+    cap pvar ln_casualties_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation `ivar' ///
         if year >= 1996, lags(2) instlags(1/2) fod gmmstyle
 }
 
 * --- 12.5 Excluding active armed-conflict years ---
 * Tests whether the terrorism-FDI effect survives once civil/interstate war
 * years are dropped, i.e. is not purely picking up war effects.
-pvar terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation instit_baseline ///
+pvar ln_casualties_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline ///
     if sb_exist == 0, lags(2) instlags(1/2) fod gmmstyle
 
 * --- 12.6 Excluding turbulent global periods ---
-pvar terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation instit_baseline ///
+pvar ln_casualties_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline ///
     if !inlist(year,1973,1974,2008,2009,2020), ///
     lags(2) instlags(1/2) fod gmmstyle
 
 * --- 12.7 Sub-period split (structural break check) ---
-pvar terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation instit_baseline ///
+pvar ln_casualties_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline ///
     if year <= 1991, lags(2) instlags(1/2) fod gmmstyle
-pvar terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation instit_baseline ///
+pvar ln_casualties_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline ///
     if year > 1991 & year <= 2001, lags(2) instlags(1/2) fod gmmstyle
-pvar terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation instit_baseline ///
+pvar ln_casualties_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline ///
     if year > 2001, lags(2) instlags(1/2) fod gmmstyle
 
 * --- 12.8 Lag length and instrument-count sensitivity ---
-pvar terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation instit_baseline, ///
+pvar ln_casualties_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline, ///
     lags(1) instlags(1/2) fod gmmstyle
-pvar terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation instit_baseline, ///
+pvar ln_casualties_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline, ///
     lags(3) instlags(1/2) fod gmmstyle
-pvar terror_econ_business_ln fdi_in_ihs gdp_growth trade_share lninflation instit_baseline, ///
+pvar ln_casualties_capital fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline, ///
     lags(2) instlags(1/4) fod gmmstyle      // compare overid p-value to baseline
 
 
