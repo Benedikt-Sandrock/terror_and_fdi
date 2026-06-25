@@ -76,7 +76,6 @@ use "final_data_terror_and_fdi.dta", clear
 
 encode ISO3, gen(ccode)
 xtset ccode year
-
 * --- Diagnose panel structure ---
 xtdescribe
 
@@ -122,6 +121,7 @@ replace has_interpolation = 1 if missing(fdi_inflow_percent) & !missing(fdi_temp
 replace fdi_inflow_percent = fdi_temp if missing(fdi_inflow_percent)
 bysort ccode: egen interpolation_num = sum(has_interpolation)
 drop fdi_temp
+
 
 *Countries with interpolation:
 *Burundi (6), Guinea (1), Iraq (2), Libyen (1), French Polynesia (1), El Salvador (2)
@@ -252,6 +252,8 @@ gen ln_cas_nocap_pc = ln(casualties_no_capital_pc+1)
 
 rename ln_casualties_capital ln_cas_cap
 rename ln_casualties_no_capital ln_cas_no_cap
+rename ln_casualties_top3 ln_cas_top3
+rename ln_casualties_no_top3 ln_cas_no_top3
 
 
 * --- 2.2 FDI (sign-preserving IHS transform: values can be negative) ---
@@ -308,11 +310,12 @@ preserve
 restore
 merge m:1 ccode using `nrr_groups', nogenerate
 
-* Income-tier proxy (no WB classification variable available), based on
-* time-averaged GDP per capita per country
-*Income group variable has been added: Classification by World Bank in
-* Low income, Lower middle income, Upper middle income, High income
-
+*Gen income variable from WB classificatio
+gen income_class =.
+replace income_class = 1 if income_group =="Low income"
+replace income_class = 2 if income_group =="Lower middle income"
+replace income_class = 3 if income_group =="Upper middle income"
+replace income_class = 4 if income_group =="High income"
 
 * Terrorism exposure split (time-varying median, based on primary measure)
 * Variable is now defined using exposure to general terror, not the specific
@@ -322,14 +325,14 @@ gen highterror = (casualties_total > terror_p50)
 
 
 * --- 2.5 Demean variables by year ---
-
+/*
 foreach var of varlist ln_cas_cap ln_cas_no_cap fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline finv_GDP {
     bysort year: egen mean_`var' = mean(`var')
     replace `var' = `var' - mean_`var'
   
     drop mean_`var'
 }
-
+*/
 *===============================================================================
 * 3. DESCRIPTIVE STATISTICS
 *===============================================================================
@@ -360,27 +363,59 @@ list ISO3 year gdp_per_capita_constant gdp_growth if abs(gdp_growth) > 50 & !mis
 * 4. PANEL UNIT ROOT TESTS
 *===============================================================================
 * Test for cross-sectional-dependence first
-xtcd2 ln_cas_cap
-xtcd2 fdi_in_ihs
-xtcd2 gdp_growth
-xtcd2 trade_share_gmd
-xtcd2 lninflation
-xtcd2 instit_baseline
+global sys_vars = "ln_cas_cap ln_cas_no_cap ln_cas_top3 ln_cas_no_top3 fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline"
+
+
+
+foreach v of global sys_vars {
+    di "----------------------------------------------------"
+	di "=== Cross-sectional dependence: `v' ==="
+	di "----------------------------------------------------"
+	xtcd2 `v'
+
+}
+
 
 *xtcdf ln_cas_cap ln_cas_no_cap fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline
 
-foreach v in ln_cas_cap fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline {
+foreach v of global sys_vars {
     di "----------------──────────────────────────────────"
-    di "CIPS Test (2nd Gen) für: `v'"
+    di "CIPS Test (2nd Gen) for: `v'"
+	di "First one without, second with trend."
     di "----------------────────────────────────────────--"
     
     pescadf `v', lags(2)
+	pescadf `v', lags(2) trend
 }
 
-*instit_baseline is non-stationary. Create first difference and test again
-gen d_instit = D.instit_baseline
 
-pescadf d_instit, lags(2)
+
+preserve
+bysort year: egen mean_cap = mean(ln_cas_cap)
+bysort year: egen mean_no_cap = mean(ln_cas_no_cap)
+collapse (mean) mean_cap mean_no_cap, by(year)
+twoway (line mean_cap year, yaxis(1)) (line mean_no_cap year, yaxis(2)), legend(order(1 "ln_cas_cap", 2 "ln_cas_no_cap"))
+restore
+
+
+
+local nonstationary_vars = "ln_cas_no_cap ln_cas_no_top3 trade_share_gmd instit_baseline"
+
+foreach v of local nonstationary_vars {
+	di "=== First-differencing and retesting `v' ==="
+	gen d_`v' = D.`v'
+	pescadf d_`v' if income_class, lags(2)
+	pescadf d_`v', lags(2) trend
+}
+
+rename d_instit_baseline d_instit
+rename d_trade_share_gmd d_tr_share
+
+global controls = "gdp_growth d_tr_share lninflation d_instit"
+
+
+
+
 
 *===============================================================================
 * 5. PANEL COINTEGRATION TESTS  (only if levels are I(1) - requires Stata 16+)
@@ -394,19 +429,52 @@ xtwest      fdi_in_ihs ln_cas_cap gdp_growth trade_share_gmd lninflation instit_
 *===============================================================================
 * 6. LAG ORDER SELECTION
 *===============================================================================
-/*
-pvarsoc ln_cas_cap fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline, ///
-    pvaropts(instlags(1/4) gmmstyle) maxlag(4)
 
-pvarsoc ln_cas_cap fdi_in_ihs gdp_growth trade_share_gmd lninflation instit_baseline, ///
-    pvaropts(instlags(2/4) gmmstyle) maxlag(4)
+
+pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap, maxlag(3) pvaropt(instlag(1/4) gmmstyle)
+
+pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap, maxlag(3) pvaropt(instlag(2/4) gmmstyle)
+
+pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap d_tr_share lninflation d_instit gdp_growth, maxlag(3) pvaropt(instlag(2/4) gmmstyle)
+
+
+* --- SAME FOR NOT-HIGH-INCOME COUNTRIES ---
+
+pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap, maxlag(3) pvaropt(instlag(2/4) gmmstyle)
+
+pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap d_tr_share lninflation d_instit gdp_growth, maxlag(3) pvaropt(instlag(2/4) gmmstyle)
+
+/*
+foreach v of global controls {
+	pvarsoc fdi_in_ihs ln_cas_cap ln_cas_no_cap `v', maxlag(3) pvaropt(instlag(2/4) gmmstyle)
+}
+
+* Test different combinations of controls
+
+pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap d_tr_share lninflation, maxlag(3) pvaropt(instlag(2/4))
+
+pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap d_tr_share d_instit, maxlag(3) pvaropt(instlag(2/4))
+
+pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap lninflation d_instit, maxlag(3) pvaropt(instlag(2/4))
+
+pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap lninflation gdp_growth, maxlag(3) pvaropt(instlag(2/4))
+
+pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap gdp_growth d_instit, maxlag(3) pvaropt(instlag(2/4))
+
+pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap d_tr_share gdp_growth, maxlag(3) pvaropt(instlag(2/4))
+
+
+
+pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap d_tr_share d_instit lninflation, maxlag(3) pvaropt(instlag(2/4))
+
+pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap d_instit lninflation gdp_growth, maxlag(3) pvaropt(instlag(2/4))
+
+pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap d_tr_share lninflation gdp_growth, maxlag(3) pvaropt(instlag(2/4))
+
+pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap d_tr_share d_instit gdp_growth, maxlag(3) pvaropt(instlag(2/4))
 */
 
-pvarsoc fdi_in_ihs ln_cas_cap ln_cas_no_cap, maxlag(3) pvaropt(instlag(2/4) gmmstyle)
 
-pvarsoc fdi_in_ihs ln_cas_cap ln_cas_no_cap, maxlag(3) pvaropt(instlag(2/4))
-
-pvarsoc fdi_in_ihs ln_cas_cap ln_cas_no_cap gdp_growth trade_share_gmd lninflation instit_baseline, maxlag(3) pvaropt(instlag(2/4))
 
 
 *===============================================================================
@@ -416,13 +484,9 @@ pvarsoc fdi_in_ihs ln_cas_cap ln_cas_no_cap gdp_growth trade_share_gmd lninflati
 * top of file on instrument proliferation. Compare to instlags(1/4) in
 * Section 12.7 as a robustness check.
 
-xtabond2 fdi_in_ihs L.fdi_in_ihs L.ln_cas_cap L.ln_cas_no_cap gdp_growth, ///
-    gmm(L.fdi_in_ihs L.ln_cas_cap, lag(2 .)) ///
-    iv(gdp_growth trade_share_gmd lninflation instit_baseline) ///
-    twostep robust
-	
-pvar fdi_in_ihs ln_cas_cap gdp_growth trade_share_gmd lninflation d_instit, ///
-    lags(2) instlags(1/2) fod gmmstyle overid
+
+pvar fdi_in_ihs ln_cas_cap d_ln_cas_no_cap gdp_growth d_tr_share lninflation d_instit if income_class != 4, ///
+    lags(1) instlags(2/4) fod gmmstyle overid
 
 estimates store pvar_baseline
 ereturn list
@@ -451,14 +515,12 @@ pvargranger
 
 pvarirf, mc(200) level(95) ///
     impulse(ln_cas_cap) response(fdi_in_ihs) ///
-    figopts(title("IRF: Business-target terrorism shock {&rarr} FDI") ///
-            xtitle("Years") ytitle(""))
-
+    
+/*
 pvarirf, mc(200) level(95) oirf table
 
 pvarfevd, ///
     impulse(ln_cas_cap) response(fdi_in_ihs) ///
-    figopts(title("FEVD: Share of FDI variance from terrorism shocks"))
 
 
 *===============================================================================
