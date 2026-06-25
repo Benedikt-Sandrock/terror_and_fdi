@@ -73,7 +73,6 @@ cap ssc install pescadf
 *===============================================================================
 
 use "final_data_terror_and_fdi.dta", clear
-
 encode ISO3, gen(ccode)
 xtset ccode year
 * --- Diagnose panel structure ---
@@ -440,9 +439,9 @@ pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap d_tr_share lninflation d_instit gd
 
 * --- SAME FOR NOT-HIGH-INCOME COUNTRIES ---
 
-pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap, maxlag(3) pvaropt(instlag(2/4) gmmstyle)
+pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap if income_class <4, maxlag(3) pvaropt(instlag(2/4) gmmstyle)
 
-pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap d_tr_share lninflation d_instit gdp_growth, maxlag(3) pvaropt(instlag(2/4) gmmstyle)
+pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap d_tr_share lninflation d_instit gdp_growth income_class <4, maxlag(3) pvaropt(instlag(2/4) gmmstyle)
 
 /*
 foreach v of global controls {
@@ -485,7 +484,19 @@ pvarsoc fdi_in_ihs ln_cas_cap d_ln_cas_no_cap d_tr_share d_instit gdp_growth, ma
 * Section 12.7 as a robustness check.
 
 
-pvar fdi_in_ihs ln_cas_cap d_ln_cas_no_cap gdp_growth d_tr_share lninflation d_instit if income_class != 4, ///
+pvar fdi_in_ihs ln_cas_cap d_ln_cas_no_cap gdp_growth d_tr_share lninflation d_instit if income_class < 4, ///
+    lags(1) instlags(2/4) fod gmmstyle overid
+
+pvar fdi_in_ihs ln_cas_cap d_ln_cas_no_cap if income_class < 4 & year > 1993, ///
+    lags(1) instlags(2/4) fod gmmstyle overid
+
+pvar fdi_in_ihs ln_cas_cap d_ln_cas_no_cap if income_class < 4 & year < 1993, ///
+    lags(1) instlags(2/4) fod gmmstyle overid
+
+pvar fdi_in_ihs ln_cas_cap d_ln_cas_no_cap if income_class == 4 & year > 1993, ///
+    lags(1) instlags(2/4) fod gmmstyle overid
+
+pvar fdi_in_ihs ln_cas_cap d_ln_cas_no_cap if income_class == 4 & year < 1993, ///
     lags(1) instlags(2/4) fod gmmstyle overid
 
 estimates store pvar_baseline
