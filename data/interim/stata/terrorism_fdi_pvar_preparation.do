@@ -12,7 +12,7 @@
 * as independent states, based on GTD Codebook (Aug 2021), p.19
 *-----------------------------------------------------------
 clear
-use "gtd_processed.dta"
+use "gtd_processed_interpolated.dta"
 
 drop if ISO3 == "not found"
 

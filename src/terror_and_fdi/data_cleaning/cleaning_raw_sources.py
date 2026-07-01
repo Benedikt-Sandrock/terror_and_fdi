@@ -6,6 +6,7 @@ import pandas as pd
 import country_converter as coco
 import logging
 import time
+import numpy as np
 from terror_and_fdi.config import RAW, INTERIM, STATA
 
 # ==============================================================
@@ -19,7 +20,7 @@ CLEAN_UCDP = False
 CLEAN_WORLD_BANK = False
 CLEAN_WORLD_CITIES = False
 CLEAN_GTD = False
-CLEAN_METADATA = True
+CLEAN_METADATA = False
 
 CONVERT_TO_DTA = True
 
@@ -373,6 +374,31 @@ if CLEAN_GTD:
     end_time = time.perf_counter()
     duration = end_time - start_time
     print(f"GTD cleaning takes {duration} seconds to run.")
+
+df = pd.read_csv(INTERIM / "gtd_processed.csv")
+
+
+vars_to_interpolate = ['incidents_total', 'fatalities_total',
+       'wounded_total', 'casualties_total', 'casualties_capital',
+       'casualties_no_capital', 'incidents_capital', 'casualties_top3',
+       'casualties_no_top3', 'incidents_top3', 'cas_capital_business',
+       'cas_capital_nonbusiness', 'cas_nocapital_business',
+       'cas_nocapital_nonbusiness', 'inc_capital_business',
+       'inc_capital_nonbusiness', 'cas_top3_business', 'cas_top3_nonbusiness',
+       'cas_notop3_business', 'cas_notop3_nonbusiness', 'inc_top3_business',
+       'inc_top3_nonbusiness']
+df.loc[df['year'] == 1993, vars_to_interpolate] = np.nan
+df = df.set_index(['country_txt', 'year']).sort_index()
+
+df[vars_to_interpolate] = df.groupby('country_txt')[vars_to_interpolate].transform(
+    lambda x: x.interpolate(method='linear', limit_direction='both')
+)
+
+df = df.reset_index()
+
+
+
+df.to_csv(INTERIM / "gtd_processed_interpolated.csv", index = False)
 
 # CONVERT TO DTA
 if CONVERT_TO_DTA:
