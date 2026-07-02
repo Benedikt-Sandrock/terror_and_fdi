@@ -22,7 +22,10 @@ CLEAN_WORLD_CITIES = False
 CLEAN_GTD = False
 CLEAN_METADATA = False
 
-CONVERT_TO_DTA = True
+CLEAN_IMF_FDI = True
+
+CONVERT_TO_DTA = False
+
 
 logging.getLogger('country_converter').setLevel(logging.CRITICAL)
 cc = coco.CountryConverter()
@@ -375,30 +378,38 @@ if CLEAN_GTD:
     duration = end_time - start_time
     print(f"GTD cleaning takes {duration} seconds to run.")
 
-df = pd.read_csv(INTERIM / "gtd_processed.csv")
+def interpolate_gtd(gtd_df):
+    gtd_df = pd.read_csv(INTERIM / "gtd_processed.csv")
 
 
-vars_to_interpolate = ['incidents_total', 'fatalities_total',
-       'wounded_total', 'casualties_total', 'casualties_capital',
-       'casualties_no_capital', 'incidents_capital', 'casualties_top3',
-       'casualties_no_top3', 'incidents_top3', 'cas_capital_business',
-       'cas_capital_nonbusiness', 'cas_nocapital_business',
-       'cas_nocapital_nonbusiness', 'inc_capital_business',
-       'inc_capital_nonbusiness', 'cas_top3_business', 'cas_top3_nonbusiness',
-       'cas_notop3_business', 'cas_notop3_nonbusiness', 'inc_top3_business',
-       'inc_top3_nonbusiness']
-df.loc[df['year'] == 1993, vars_to_interpolate] = np.nan
-df = df.set_index(['country_txt', 'year']).sort_index()
+    vars_to_interpolate = ['incidents_total', 'fatalities_total',
+           'wounded_total', 'casualties_total', 'casualties_capital',
+           'casualties_no_capital', 'incidents_capital', 'casualties_top3',
+           'casualties_no_top3', 'incidents_top3', 'cas_capital_business',
+           'cas_capital_nonbusiness', 'cas_nocapital_business',
+           'cas_nocapital_nonbusiness', 'inc_capital_business',
+           'inc_capital_nonbusiness', 'cas_top3_business', 'cas_top3_nonbusiness',
+           'cas_notop3_business', 'cas_notop3_nonbusiness', 'inc_top3_business',
+           'inc_top3_nonbusiness']
+    gtd_df.loc[gtd_df['year'] == 1993, vars_to_interpolate] = np.nan
+    gtd_df = gtd_df.set_index(['country_txt', 'year']).sort_index()
 
-df[vars_to_interpolate] = df.groupby('country_txt')[vars_to_interpolate].transform(
-    lambda x: x.interpolate(method='linear', limit_direction='both')
-)
+    gtd_df[vars_to_interpolate] = gtd_df.groupby('country_txt')[vars_to_interpolate].transform(
+        lambda x: x.interpolate(method='linear', limit_direction='both')
+    )
 
-df = df.reset_index()
+    gtd_df = gtd_df.reset_index()
+
+    gtd_df.to_csv(INTERIM / "gtd_processed_interpolated.csv", index = False)
 
 
+def clean_imf_fdi(input_path, output_path):
+    df = pd.read_csv(input_path)
+    df = df.drop(columns = ["BOP_ACCOUNTING_ENTRY", "UNIT", "FREQUENCY", "SCALE", "INDICATOR"]).rename(
+    columns = {"OBS_VALUE": "net_fdi_imf", "COUNTRY": "country", "TIME_PERIOD": "time_period"}
+    )
 
-df.to_csv(INTERIM / "gtd_processed_interpolated.csv", index = False)
+    df.to_csv(output_path, index = False)
 
 # CONVERT TO DTA
 if CONVERT_TO_DTA:
@@ -414,3 +425,5 @@ if CONVERT_TO_DTA:
         dta_path = OUTPUT_DIR / dta_filename
 
         df.to_stata(dta_path, write_index = False, version = 118)
+
+clean_imf_fdi(RAW/ "imf"/"net_fdi_quarterly_imf.csv", INTERIM / "fdi_imf_processed.csv")
