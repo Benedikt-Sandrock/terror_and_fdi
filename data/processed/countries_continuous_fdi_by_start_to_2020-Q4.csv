@@ -1,0 +1,156 @@
+country,from_1993Q1,from_2000Q1,from_2003Q1,from_2005Q1,from_2010Q1,from_2015Q1,from_2016Q1
+"Afghanistan, Islamic Republic of",False,False,False,False,True,True,True
+Albania,False,True,True,True,True,True,True
+Algeria,False,False,False,False,False,True,True
+Angola,False,False,False,False,False,True,True
+Argentina,True,True,True,True,True,True,True
+"Armenia, Republic of",True,True,True,True,True,True,True
+"Aruba, Kingdom of the Netherlands",True,True,True,True,True,True,True
+Australia,True,True,True,True,True,True,True
+Austria,False,False,False,True,True,True,True
+"Azerbaijan, Republic of",False,True,True,True,True,True,True
+"Bahamas, The",True,True,True,True,True,True,True
+"Bahrain, Kingdom of",False,False,False,False,False,False,False
+Bangladesh,True,True,True,True,True,True,True
+"Belarus, Republic of",False,True,True,True,True,True,True
+Belgium,False,False,True,True,True,True,True
+Belize,False,False,True,True,True,True,True
+Bermuda,False,False,False,False,True,True,True
+Bhutan,False,False,False,False,True,True,True
+Bolivia,True,True,True,True,True,True,True
+Bosnia and Herzegovina,False,False,True,True,True,True,True
+Botswana,False,False,False,False,False,False,False
+Brazil,True,True,True,True,True,True,True
+Brunei Darussalam,False,False,True,True,True,True,True
+Bulgaria,True,True,True,True,True,True,True
+Burundi,False,False,False,False,False,True,True
+Cabo Verde,False,True,True,True,True,True,True
+Cambodia,False,True,True,True,True,True,True
+Cameroon,False,False,False,False,False,False,True
+Canada,True,True,True,True,True,True,True
+Chile,True,True,True,True,True,True,True
+"China, People's Republic of",False,False,False,True,True,True,True
+Colombia,False,True,True,True,True,True,True
+"Congo, Democratic Republic of the",False,False,False,False,False,False,False
+Costa Rica,False,True,True,True,True,True,True
+"Croatia, Republic of",True,True,True,True,True,True,True
+Curaçao and Sint Maarten,False,False,False,False,False,True,True
+"Curaçao, Kingdom of the Netherlands",False,False,False,False,False,True,True
+Cyprus,False,False,True,True,True,True,True
+Czech Republic,True,True,True,True,True,True,True
+Denmark,True,True,True,True,True,True,True
+Djibouti,False,False,False,False,False,False,False
+Dominican Republic,False,False,False,False,False,True,True
+Ecuador,True,True,True,True,True,True,True
+"Egypt, Arab Republic of",False,False,False,False,False,True,True
+El Salvador,False,True,True,True,True,True,True
+"Estonia, Republic of",True,True,True,True,True,True,True
+"Eswatini, Kingdom of",False,False,False,False,False,True,True
+"Ethiopia, The Federal Democratic Republic of",False,False,True,True,True,True,True
+Euro Area (EA),False,True,True,True,True,True,True
+"Fiji, Republic of",False,True,True,True,True,True,True
+Finland,True,True,True,True,True,True,True
+France,True,True,True,True,True,True,True
+"Gambia, The",False,False,False,False,True,True,True
+Georgia,False,True,True,True,True,True,True
+Germany,False,True,True,True,True,True,True
+Ghana,False,False,False,False,False,True,True
+Greece,False,True,True,True,True,True,True
+Guatemala,True,True,True,True,True,True,True
+Guinea,False,False,False,False,True,True,True
+Guyana,False,False,False,False,False,False,True
+Haiti,False,False,False,True,True,True,True
+Honduras,False,False,False,True,True,True,True
+"Hong Kong Special Administrative Region, People's Republic of China",False,True,True,True,True,True,True
+Hungary,True,True,True,True,True,True,True
+Iceland,True,True,True,True,True,True,True
+India,True,True,True,True,True,True,True
+Indonesia,True,True,True,True,True,True,True
+Iraq,False,False,False,False,False,True,True
+Ireland,False,False,False,True,True,True,True
+Israel,True,True,True,True,True,True,True
+Italy,True,True,True,True,True,True,True
+Jamaica,False,False,False,False,False,True,True
+Japan,False,True,True,True,True,True,True
+Jordan,True,True,True,True,True,True,True
+"Kazakhstan, Republic of",False,True,True,True,True,True,True
+Kiribati,False,False,False,False,False,True,True
+"Korea, Republic of",True,True,True,True,True,True,True
+"Kosovo, Republic of",False,False,False,False,True,True,True
+Kuwait,False,False,False,False,False,True,True
+Kyrgyz Republic,True,True,True,True,True,True,True
+Lao People's Democratic Republic,False,False,True,True,True,True,True
+"Latvia, Republic of",True,True,True,True,True,True,True
+Lebanon,False,False,True,True,True,True,True
+"Lesotho, Kingdom of",True,True,True,True,True,True,True
+Liberia,False,False,False,False,True,True,True
+"Lithuania, Republic of",True,True,True,True,True,True,True
+Luxembourg,False,False,True,True,True,True,True
+"Madagascar, Republic of",False,False,True,True,True,True,True
+Malaysia,False,True,True,True,True,True,True
+Malta,False,True,True,True,True,True,True
+"Mauritania, Islamic Republic of",False,False,False,False,False,True,True
+Mauritius,False,True,True,True,True,True,True
+Mexico,True,True,True,True,True,True,True
+"Moldova, Republic of",False,True,True,True,True,True,True
+Mongolia,False,True,True,True,True,True,True
+Montenegro,False,False,False,False,True,True,True
+Morocco,False,False,True,True,True,True,True
+"Mozambique, Republic of",False,False,False,True,True,True,True
+Myanmar,False,False,False,False,False,False,False
+Namibia,False,True,True,True,True,True,True
+Nepal,True,True,True,True,True,True,True
+"Netherlands, The",True,True,True,True,True,True,True
+New Zealand,False,False,True,True,True,True,True
+Nicaragua,True,True,True,True,True,True,True
+Nigeria,False,False,False,False,False,True,True
+"North Macedonia, Republic of",False,True,True,True,True,True,True
+Norway,False,True,True,True,True,True,True
+Pakistan,True,True,True,True,True,True,True
+Panama,False,True,True,True,True,True,True
+Papua New Guinea,True,True,True,True,True,True,True
+Paraguay,False,True,True,True,True,True,True
+Peru,True,True,True,True,True,True,True
+Philippines,True,True,True,True,True,True,True
+"Poland, Republic of",False,True,True,True,True,True,True
+Portugal,True,True,True,True,True,True,True
+Qatar,False,False,False,False,False,True,True
+Romania,True,True,True,True,True,True,True
+Russian Federation,False,True,True,True,True,True,True
+Rwanda,False,False,False,False,False,False,False
+Samoa,False,False,False,True,True,True,True
+Saudi Arabia,False,False,False,False,True,True,True
+"Serbia, Republic of",False,False,False,False,True,True,True
+Seychelles,False,False,False,True,True,True,True
+Singapore,False,True,True,True,True,True,True
+"Sint Maarten, Kingdom of the Netherlands",False,False,False,False,False,True,True
+Slovak Republic,True,True,True,True,True,True,True
+"Slovenia, Republic of",True,True,True,True,True,True,True
+Solomon Islands,False,False,False,False,True,True,True
+South Africa,True,True,True,True,True,True,True
+Spain,True,True,True,True,True,True,True
+Sri Lanka,True,True,True,True,True,True,True
+Sudan,False,True,True,True,True,True,True
+Suriname,False,False,False,True,True,True,True
+Sweden,True,True,True,True,True,True,True
+Switzerland,False,True,True,True,True,True,True
+"São Tomé and Príncipe, Democratic Republic of",False,False,False,False,False,True,True
+"Tajikistan, Republic of",False,False,True,True,True,True,True
+"Tanzania, United Republic of",False,False,False,False,False,True,True
+Thailand,True,True,True,True,True,True,True
+"Timor-Leste, Democratic Republic of",False,False,False,False,True,True,True
+Tonga,False,False,False,False,False,True,True
+Trinidad and Tobago,False,False,False,False,False,True,True
+Tunisia,False,False,False,False,False,False,False
+"Türkiye, Republic of",True,True,True,True,True,True,True
+Uganda,False,False,True,True,True,True,True
+Ukraine,False,True,True,True,True,True,True
+United Kingdom,True,True,True,True,True,True,True
+United States,True,True,True,True,True,True,True
+Uruguay,False,True,True,True,True,True,True
+"Uzbekistan, Republic of",False,False,False,True,True,True,True
+Vanuatu,True,True,True,True,True,True,True
+Vietnam,False,True,True,True,True,True,True
+West Bank and Gaza,False,False,False,False,False,True,True
+Zambia,False,False,False,True,True,True,True
+Zimbabwe,False,False,False,False,False,False,False
