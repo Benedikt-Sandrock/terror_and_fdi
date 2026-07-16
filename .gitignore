@@ -5,3 +5,6 @@ __pycache__
 /data/raw/
 /data_temp/
 /data/interim/stata/
+/data/interim/geonames/
+/data/processed/countries_continuous_fdi_by_start_to_2020-Q4.csv
+/data/processed/summary_continuous_fdi_by_start_to_2020-Q4.csv
