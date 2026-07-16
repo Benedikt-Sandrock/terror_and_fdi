@@ -5,6 +5,9 @@ from terror_and_fdi.config import PROCESSED, INTERIM
 import country_converter as coco
 import numpy as np
 
+
+QUARTERLY_PATH = INTERIM / "quarterly"
+
 manual_iso3 = {
     "Aruba, Kingdom of the Netherlands": "ABW",
     "Sint Maarten, Kingdom of the Netherlands": "SXM",
@@ -19,7 +22,7 @@ manual_iso3 = {
 
 cc = coco.CountryConverter()
 
-df = pd.read_csv(INTERIM / "fdi_imf_processed.csv")
+df = pd.read_stata(QUARTERLY_PATH / "fdi_imf_processed.dta")
 
 
 START_PERIODS = [

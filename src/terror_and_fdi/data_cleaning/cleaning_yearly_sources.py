@@ -403,13 +403,6 @@ def interpolate_gtd(gtd_df):
     gtd_df.to_csv(INTERIM / "gtd_processed_interpolated.csv", index = False)
 
 
-def clean_imf_fdi(input_path, output_path):
-    df = pd.read_csv(input_path)
-    df = df.drop(columns = ["BOP_ACCOUNTING_ENTRY", "UNIT", "FREQUENCY", "SCALE", "INDICATOR"]).rename(
-    columns = {"OBS_VALUE": "net_fdi_imf", "COUNTRY": "country", "TIME_PERIOD": "time_period"}
-    )
-
-    df.to_csv(output_path, index = False)
 
 # CONVERT TO DTA
 if CONVERT_TO_DTA:
@@ -426,4 +419,3 @@ if CONVERT_TO_DTA:
 
         df.to_stata(dta_path, write_index = False, version = 118)
 
-clean_imf_fdi(RAW/ "imf"/"net_fdi_quarterly_imf.csv", INTERIM / "fdi_imf_processed.csv")
