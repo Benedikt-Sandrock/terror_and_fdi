@@ -8,3 +8,5 @@ __pycache__
 /data/interim/geonames/
 /data/processed/countries_continuous_fdi_by_start_to_2020-Q4.csv
 /data/processed/summary_continuous_fdi_by_start_to_2020-Q4.csv
+/data/interim/wup_city_classification/validation_controls/
+/data/interim/wup_city_classification/
