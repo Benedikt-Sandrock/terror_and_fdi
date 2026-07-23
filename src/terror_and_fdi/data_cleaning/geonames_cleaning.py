@@ -30,6 +30,9 @@ GTD_CITY_LIST_PATH = OUTPUT_DIR / "gtd_unique_cities.csv"
 # Diagnosetabelle mit den GeoNames-Matches.
 CITY_MATCHES_PATH = OUTPUT_DIR / "gtd_geonames_city_matches.csv"
 
+# Landesweite Referenztabelle der drei größten GeoNames-Städte.
+TOP3_CITIES_PATH = OUTPUT_DIR / "geonames_top3_cities_by_country.csv"
+
 # Vollständiger GTD-Datensatz mit angehängten GeoNames-Variablen.
 MATCHED_GTD_PATH = OUTPUT_DIR / "gtd_with_geonames.csv"
 
@@ -40,6 +43,21 @@ ALTERNATE_NAMES_CHUNKSIZE = 1_000_000
 
 # Ein großer Abstand ist nicht automatisch ein Fehlmatch, wird aber markiert.
 DISTANCE_WARNING_KM = 100.0
+
+# Nur echte Städte bzw. Verwaltungssitze werden für die Top-3-Rangfolge
+# berücksichtigt. Insbesondere PPLX (Stadtteil) würde die Rangfolge sonst
+# verfälschen. Für das allgemeine GTD-Matching bleiben weiterhin alle
+# bewohnten Orte der Feature-Klasse P zulässig.
+TOP3_FEATURE_CODES = {
+    "PPL",
+    "PPLA",
+    "PPLA2",
+    "PPLA3",
+    "PPLA4",
+    "PPLA5",
+    "PPLC",
+    "PPLG",
+}
 
 # Unbekannte bzw. nicht sinnvoll matchbare GTD-Städte.
 INVALID_CITY_NAMES = {
@@ -551,26 +569,34 @@ def read_relevant_alternate_names(
 # STEP 3: READ ONLY RELEVANT POPULATED PLACES FROM ALLCOUNTRIES
 # =============================================================================
 
-def read_relevant_geonames_places(
+def read_relevant_geonames_places_and_top3(
     target_city_names: set[str],
     target_iso3_codes: set[str],
     alternate_names: pd.DataFrame,
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Liest allCountries.txt chunkweise.
+    Liest allCountries.txt genau einmal chunkweise.
 
-    Ein Ort wird nur behalten, wenn:
+    Für das GTD-Matching wird ein Ort nur behalten, wenn:
       - er ein bewohnter Ort ist (feature_class == P),
       - er in einem GTD-Land liegt,
       - und entweder sein offizieller/ASCII-Name in GTD vorkommt
         oder einer seiner Aliasnamen in GTD vorkommt.
+
+    Parallel werden aus allen geeigneten Städten in jedem relevanten Land
+    die drei bevölkerungsreichsten unterschiedlichen Städte bestimmt. Die
+    Top-3-Rangfolge wird somit ausdrücklich nicht nur unter den im GTD
+    vorkommenden Städten gebildet.
 
     GeoNames liefert Ländercodes nur als ISO2 ("country_code"). Diese
     werden hier direkt zu ISO3 konvertiert und die ISO2-Spalte danach
     verworfen, damit im weiteren Verlauf nur noch ISO3 verwendet wird
     (identisch zum Schema der GTD-Seite).
     """
-    print("3/7: Lade relevante bewohnte GeoNames-Orte ...")
+    print(
+        "3/7: Lade relevante GeoNames-Orte und bestimme "
+        "landesweite Top-3-Städte ..."
+    )
 
     alias_geonameids = set(
         alternate_names["geonameid"]
@@ -580,6 +606,7 @@ def read_relevant_geonames_places(
     )
 
     relevant_chunks: list[pd.DataFrame] = []
+    top3_candidate_chunks: list[pd.DataFrame] = []
 
     needed_columns = [
         "geonameid",
@@ -640,6 +667,21 @@ def read_relevant_geonames_places(
         # Die ISO2-Spalte wird nicht mehr gebraucht; ab hier zählt nur ISO3.
         chunk = chunk.drop(columns=["country_code"])
 
+        chunk["population"] = pd.to_numeric(
+            chunk["population"],
+            errors="coerce",
+        ).fillna(0)
+
+        chunk["latitude"] = pd.to_numeric(
+            chunk["latitude"],
+            errors="coerce",
+        )
+
+        chunk["longitude"] = pd.to_numeric(
+            chunk["longitude"],
+            errors="coerce",
+        )
+
         chunk["name_normalized"] = chunk["name"].map(
             normalize_city_name
         )
@@ -647,6 +689,46 @@ def read_relevant_geonames_places(
         chunk["asciiname_normalized"] = chunk["asciiname"].map(
             normalize_city_name
         )
+
+        # Die globalen Top 3 eines Landes müssen in jedem Fall unter den
+        # lokalen Top 3 desjenigen Dateichunks liegen, in dem sie vorkommen.
+        # Deshalb reichen höchstens drei Kandidaten je Land und Chunk aus.
+        top3_chunk = chunk.loc[
+            chunk["feature_code"].isin(TOP3_FEATURE_CODES)
+            & chunk["name_normalized"].notna()
+        ].copy()
+
+        if not top3_chunk.empty:
+            top3_chunk = (
+                top3_chunk.sort_values(
+                    ["ISO3", "population", "geonameid"],
+                    ascending=[True, False, True],
+                )
+                # Gleichnamige GeoNames-Einträge innerhalb eines Landes
+                # gelten für die Rangfolge als dieselbe Stadt.
+                .drop_duplicates(
+                    subset=["ISO3", "name_normalized"],
+                    keep="first",
+                )
+                .groupby("ISO3", group_keys=False)
+                .head(3)
+            )
+
+            top3_candidate_chunks.append(
+                top3_chunk[
+                    [
+                        "ISO3",
+                        "geonameid",
+                        "name",
+                        "asciiname",
+                        "name_normalized",
+                        "latitude",
+                        "longitude",
+                        "feature_code",
+                        "population",
+                    ]
+                ]
+            )
 
         direct_name_match = (
             chunk["name_normalized"].isin(target_city_names)
@@ -672,33 +754,69 @@ def read_relevant_geonames_places(
             "Es wurden keine passenden GeoNames-Orte gefunden."
         )
 
+    if not top3_candidate_chunks:
+        raise ValueError(
+            "Es konnten keine Kandidaten für die Top-3-Städte bestimmt werden."
+        )
+
+    top3_cities = pd.concat(
+        top3_candidate_chunks,
+        ignore_index=True,
+    )
+
+    top3_cities = (
+        top3_cities.sort_values(
+            ["ISO3", "population", "geonameid"],
+            ascending=[True, False, True],
+        )
+        .drop_duplicates(
+            subset=["ISO3", "name_normalized"],
+            keep="first",
+        )
+        .groupby("ISO3", group_keys=False)
+        .head(3)
+        .copy()
+    )
+
+    top3_cities["top3_rank"] = (
+        top3_cities.groupby("ISO3").cumcount() + 1
+    )
+
+    top3_cities = top3_cities.sort_values(
+        ["ISO3", "top3_rank"]
+    ).reset_index(drop=True)
+
+    top3_cities.to_csv(
+        TOP3_CITIES_PATH,
+        index=False,
+        encoding="utf-8",
+    )
+
     places = pd.concat(relevant_chunks, ignore_index=True)
-
-    places["population"] = pd.to_numeric(
-        places["population"],
-        errors="coerce",
-    ).fillna(0)
-
-    places["latitude"] = pd.to_numeric(
-        places["latitude"],
-        errors="coerce",
-    )
-
-    places["longitude"] = pd.to_numeric(
-        places["longitude"],
-        errors="coerce",
-    )
 
     # Nur nationale Hauptstädte.
     places["is_capital"] = places["feature_code"].eq("PPLC")
 
     places = places.drop_duplicates(subset=["geonameid"])
 
-    print(
-        f"    Insgesamt {len(places):,} relevante GeoNames-Orte geladen."
+    top3_rank_by_geonameid = (
+        top3_cities.set_index("geonameid")["top3_rank"]
     )
 
-    return places
+    places["top3_rank"] = places["geonameid"].map(
+        top3_rank_by_geonameid
+    ).astype("Int64")
+
+    places["is_top3"] = places["top3_rank"].notna()
+
+    print(
+        f"    Insgesamt {len(places):,} relevante GeoNames-Orte geladen.\n"
+        f"    Top-3-Referenztabelle für "
+        f"{top3_cities['ISO3'].nunique():,} Länder gespeichert: "
+        f"{TOP3_CITIES_PATH}"
+    )
+
+    return places, top3_cities
 
 
 # =============================================================================
@@ -729,6 +847,8 @@ def build_name_lookup(
         "feature_code",
         "population",
         "is_capital",
+        "is_top3",
+        "top3_rank",
         "admin1_code",
         "admin2_code",
     ]
@@ -944,6 +1064,8 @@ def match_gtd_cities(
         "distance_warning",
         "feature_code",
         "is_capital",
+        "is_top3",
+        "top3_rank",
         "population",
         "admin1_code",
         "admin2_code",
@@ -1007,6 +1129,8 @@ def write_matched_gtd(
         "distance_warning",
         "feature_code",
         "is_capital",
+        "is_top3",
+        "top3_rank",
         "geonames_population",
         "admin1_code",
         "admin2_code",
@@ -1064,6 +1188,51 @@ def write_matched_gtd(
             validate="many_to_one",
         )
 
+        # Nicht matchbare und nicht gematchte Orte bleiben separat
+        # identifizierbar, werden für die spätere räumliche Aggregation aber
+        # ausdrücklich als außerhalb von Hauptstadt und Top 3 behandelt.
+        chunk["city_unknown"] = chunk["geonameid"].isna()
+
+        invalid_city = chunk["city_normalized"].isna()
+
+        chunk.loc[
+            invalid_city & chunk["match_status"].isna(),
+            "match_status",
+        ] = "invalid_or_missing_city"
+
+        chunk.loc[
+            ~invalid_city & chunk["match_status"].isna(),
+            "match_status",
+        ] = "unmatched"
+
+        for flag_column in ["is_capital", "is_top3"]:
+            chunk[flag_column] = (
+                chunk[flag_column]
+                .astype("boolean")
+                .fillna(False)
+                .astype(bool)
+            )
+
+        # GTD verwendet imonth == 0 für einen unbekannten Monat.
+        # Solche Beobachtungen erhalten kein künstliches Quartal.
+        if "imonth" in chunk.columns:
+            month = pd.to_numeric(
+                chunk["imonth"],
+                errors="coerce",
+            )
+
+            valid_month = month.between(1, 12)
+
+            chunk["quarter"] = pd.Series(
+                pd.NA,
+                index=chunk.index,
+                dtype="Int64",
+            )
+
+            chunk.loc[valid_month, "quarter"] = (
+                ((month.loc[valid_month] - 1) // 3) + 1
+            ).astype("Int64")
+
         chunk.to_csv(
             MATCHED_GTD_PATH,
             mode="w" if first_chunk else "a",
@@ -1088,6 +1257,8 @@ def write_matched_gtd(
 
 def print_match_diagnostics(
     city_matches: pd.DataFrame,
+    top3_cities: pd.DataFrame,
+    target_iso3_codes: set[str],
 ) -> None:
     print("7/7: Match-Diagnose")
 
@@ -1165,6 +1336,75 @@ def print_match_diagnostics(
             .to_string(index=False)
         )
 
+    top3_counts = top3_cities.groupby("ISO3").size()
+
+    if top3_counts.gt(3).any():
+        invalid_counts = top3_counts.loc[top3_counts.gt(3)]
+        raise ValueError(
+            "Für mindestens ein Land wurden mehr als drei Top-3-Städte "
+            f"erzeugt:\n{invalid_counts.to_string()}"
+        )
+
+    duplicated_top3_names = top3_cities.duplicated(
+        subset=["ISO3", "name_normalized"],
+        keep=False,
+    )
+
+    if duplicated_top3_names.any():
+        examples = top3_cities.loc[
+            duplicated_top3_names,
+            ["ISO3", "name", "name_normalized", "top3_rank"],
+        ].head(20)
+
+        raise ValueError(
+            "Die Top-3-Referenztabelle enthält doppelte Städtenamen "
+            f"innerhalb eines Landes:\n{examples}"
+        )
+
+    countries_with_three = int(top3_counts.eq(3).sum())
+    countries_with_fewer = sorted(
+        target_iso3_codes - set(top3_counts.loc[top3_counts.eq(3)].index)
+    )
+
+    print(
+        "\nTop-3-Diagnose:\n"
+        f"    Länder mit genau drei Referenzstädten: "
+        f"{countries_with_three:,}\n"
+        f"    Länder mit weniger als drei Referenzstädten: "
+        f"{len(countries_with_fewer):,}"
+    )
+
+    if countries_with_fewer:
+        print(
+            "    Betroffene ISO3-Codes: "
+            + ", ".join(countries_with_fewer)
+        )
+
+    validation_names = {
+        "DEU": "berlin",
+        "MEX": "mexico city",
+        "USA": "new york city",
+    }
+
+    print("\nPlausibilitätsfälle in der Top-3-Referenz:")
+
+    for iso3, city_name in validation_names.items():
+        if iso3 not in target_iso3_codes:
+            continue
+
+        case = top3_cities.loc[
+            top3_cities["ISO3"].eq(iso3)
+            & top3_cities["name_normalized"].eq(city_name)
+        ]
+
+        status = (
+            f"ja, Rang {int(case.iloc[0]['top3_rank'])}"
+            if not case.empty
+            else "nein"
+        )
+
+        print(f"    {iso3} / {city_name}: {status}")
+
 
 # =============================================================================
 # MAIN PIPELINE
@@ -1198,7 +1438,7 @@ def main() -> None:
         target_city_names=target_city_names,
     )
 
-    places = read_relevant_geonames_places(
+    places, top3_cities = read_relevant_geonames_places_and_top3(
         target_city_names=target_city_names,
         target_iso3_codes=target_iso3_codes,
         alternate_names=alternate_names,
@@ -1220,6 +1460,8 @@ def main() -> None:
 
     print_match_diagnostics(
         city_matches=city_matches,
+        top3_cities=top3_cities,
+        target_iso3_codes=target_iso3_codes,
     )
 
 
