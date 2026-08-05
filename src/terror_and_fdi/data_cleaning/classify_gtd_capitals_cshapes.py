@@ -44,6 +44,7 @@ import re
 import unicodedata
 from collections import Counter
 from pathlib import Path
+import os
 
 import numpy as np
 import pandas as pd
@@ -250,6 +251,12 @@ ROBUSTNESS_STATUS_FLAGS = [
     "unresolved_country",
 ]
 
+
+if not os.path.exists(DEFAULT_GTD_INPUT):
+    print("Restricting GTD to years after 1993...")
+    gtd_old = pd.read_csv(RAW / "gtd" / "gtd.csv")
+    gtd_new = gtd_old[gtd_old["iyear"] > 1993]
+    gtd_new.to_csv(DEFAULT_GTD_INPUT, index=False)
 
 def apply_capital_specification(
     frame: pd.DataFrame,

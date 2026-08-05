@@ -69,7 +69,19 @@ COUNTRY_OVERRIDES = {
     "Democratic Republic of the Congo": "COD",
     "Côte d'Ivoire": "CIV",
     "Kosovo": "XKX",
+    "México": "MEX",
     "State of Palestine": "PSE",
+}
+
+# Hongkonger GHS Urban Centres in R2024A_V1_2.
+# GHS weist sie China zu; für das separate FDI-Panel werden sie HKG zugeordnet.
+HONG_KONG_GHS_IDS = {
+    11185,  # Hong Kong
+    11155,  # Tuen Mun
+    11209,  # Sha Tin
+    11181,  # Fanling
+    11197,  # Tai Po
+    11167,  # Tung Chung
 }
 
 # The factual spatial status is retained independently of this treatment.
@@ -211,17 +223,19 @@ def choose_column(
 def iso3_from_country(series: pd.Series) -> pd.Series:
     cleaned = series.astype("string").str.strip()
     result = cleaned.map(COUNTRY_OVERRIDES).astype("string")
-    missing = result.isna() & cleaned.notna()
+    missing = result.isna() & cleaned.notna() & cleaned.ne("")
     if missing.any():
+        unique_countries = cleaned.loc[missing].drop_duplicates()
         converted = cc.convert(
-            names=cleaned.loc[missing].tolist(),
+            names=unique_countries.tolist(),
             to="ISO3",
             not_found="not found",
         )
-        result.loc[missing] = pd.Series(
-            converted,
-            index=result.index[missing],
-            dtype="string",
+        if isinstance(converted, str):
+            converted = [converted]
+        country_map = dict(zip(unique_countries.tolist(), converted))
+        result.loc[missing] = (
+            cleaned.loc[missing].map(country_map).astype("string")
         )
     return result.replace({"not found": pd.NA, "": pd.NA})
 
@@ -295,6 +309,41 @@ def read_top3_by_epoch(
     )
     attributes["ghs_uc_id"] = attributes[id_col].astype("string")
     attributes["ghs_uc_name"] = attributes[name_col].astype("string")
+
+    # GHS ordnet die Urban Centres innerhalb Hongkongs China zu.
+    # Die Umordnung muss vor der TOP3-Rangbildung erfolgen.
+    hong_kong_mask = (
+            pd.to_numeric(attributes[id_col], errors="coerce")
+            .isin(HONG_KONG_GHS_IDS)
+            & attributes["ISO3"].eq("CHN")
+    )
+
+    n_hong_kong = int(hong_kong_mask.sum())
+
+    if n_hong_kong != len(HONG_KONG_GHS_IDS):
+        found_ids = set(
+            pd.to_numeric(
+                attributes.loc[hong_kong_mask, id_col],
+                errors="coerce",
+            )
+            .dropna()
+            .astype(int)
+        )
+        missing_ids = HONG_KONG_GHS_IDS - found_ids
+
+        raise ValueError(
+            "Hong Kong override incomplete: "
+            f"expected {len(HONG_KONG_GHS_IDS)} centres, "
+            f"found {n_hong_kong}. "
+            f"Missing IDs: {sorted(missing_ids)}"
+        )
+
+    attributes.loc[hong_kong_mask, "ISO3"] = "HKG"
+
+    print(
+        "Applied Hong Kong GHS override: "
+        f"{n_hong_kong} centres reassigned from CHN to HKG."
+    )
 
     duplicate_ids = attributes["ghs_uc_id"].duplicated(keep=False)
     if duplicate_ids.any():
@@ -409,6 +458,18 @@ def read_top3_by_epoch(
                 "geometry",
             ]
         ].copy()
+
+    missing_hkg_epochs = [
+        epoch
+        for epoch, cities in top3_by_epoch.items()
+        if not cities["ISO3"].eq("HKG").any()
+    ]
+    if missing_hkg_epochs:
+        raise ValueError(
+            "Hong Kong has no GHS TOP3 reference in epoch(s): "
+            f"{missing_hkg_epochs}. Inspect its epoch-specific population "
+            "and polygon geometry before continuing."
+        )
 
     return top3_by_epoch
 

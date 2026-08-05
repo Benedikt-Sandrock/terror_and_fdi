@@ -17,6 +17,8 @@ dependencies = [
     "openpyxl",
     "pyarrow",
     "pyreadstat",
+    "geopandas",
+
 ]
 
 [tool.setuptools.packages.find]
