@@ -18,4 +18,6 @@ Correct file name: GHS_UCDB_MTUC_GLOBE_R2024A.gpkg
 Run:
 1. build_quarterly_terror_panel.py (Aggregates event-data to country-quarters. Creates different variables (fatalities,
    casualties, wounded) for different specifications (total, capital, top3))
+2. clean_imf_bop_fdi_quarterly_optimized.py
+3. merge_fdi_gtd_quarterly_fixed.py
 
