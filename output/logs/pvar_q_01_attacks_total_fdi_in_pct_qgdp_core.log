@@ -1,0 +1,1174 @@
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/logs/pvar_q_01_attacks_total_fdi_in_pct_qgdp_core.log
+  log type:  text
+ opened on:  19 Aug 2026, 12:27:07
+
+. 
+. 
+. *==============================================================================*
+. * 2. LOAD AND SET THE PANEL
+. *==============================================================================*
+. use "$DATA/fdi_gtd_quarterly_scaled.dta", clear
+
+. 
+. capture confirm string variable ISO3
+
+. if _rc {
+.     di as error "ISO3 is not a string variable - check the import."
+.     exit 459
+. }
+
+. encode ISO3, gen(id)
+
+. label var id "Country (encoded ISO3)"
+
+. 
+. gen t = yq(year, quarter)
+
+. format t %tq
+
+. label var t "Quarter"
+
+. 
+. xtset id t
+
+Panel variable: id (strongly balanced)
+ Time variable: t, 1994q1 to 2020q4
+         Delta: 1 quarter
+
+. isid id t
+
+. 
+. qui levelsof id, local(allids)
+
+. qui sum t
+
+. di as txt _n "Panel grid after xtset:"
+
+Panel grid after xtset:
+
+. di as txt "  countries : " wordcount("`allids'")
+  countries : 181
+
+. di as txt "  quarters  : " %tq r(min) " to " %tq r(max)
+  quarters  : 1994q1 to 2020q4
+
+. di as txt "  rows      : " %9.0fc _N
+  rows      :    19,548
+
+. 
+. 
+. *==============================================================================*
+. * 3. SAMPLE DEFINITIONS
+. *==============================================================================*
+. gen byte s_full  = (has_fdi_observation == 1 & has_gdp_lag == 1)
+
+. gen byte s_nospe = s_full & flag_spe_economy == 0
+
+. gen byte s_core  = s_full & flag_spe_economy == 0 & flag_distorted_fx == 0
+
+. 
+. bysort id: egen double _terrsum = total($TERRORRAW) if s_core
+(9,078 missing values generated)
+
+. bysort id: egen double terrsum  = max(_terrsum)
+(5,508 missing values generated)
+
+. drop _terrsum
+
+. gen byte s_terror = s_core & terrsum > 0 & !missing(terrsum)
+
+. 
+. gen byte insample = s_$SAMPLE
+
+. label var insample "Selected estimation sample"
+
+. 
+. bysort id: egen int n_insample = total(insample)
+
+. replace insample = 0 if n_insample < $MINOBS
+(68 real changes made)
+
+. 
+. di as txt _n "Sample selection (${SAMPLE}, min $MINOBS quarters):"
+
+Sample selection (core, min 20 quarters):
+
+. foreach s in full nospe core terror {
+  2.     qui count if s_`s' == 1
+  3.     local n_`s' = r(N)
+  4.     qui levelsof id if s_`s' == 1, local(ids)
+  5.     di as txt "  s_`s': " %7.0fc `n_`s'' " obs, " wordcount("`ids'") " countries"
+  6. }
+  s_full:  11,370 obs, 141 countries
+  s_nospe:  10,582 obs, 132 countries
+  s_core:  10,470 obs, 130 countries
+  s_terror:  10,090 obs, 121 countries
+
+. qui count if insample == 1
+
+. local nobs = r(N)
+
+. qui levelsof id if insample, local(ids)
+
+. local ncty = wordcount("`ids'")
+
+. di as txt "  -> selected: " %7.0fc `nobs' " obs, `ncty' countries"
+  -> selected:  10,402 obs, 123 countries
+
+. 
+. if `nobs' == 0 {
+.     di as error "The selected sample is empty. Check the switches in section 1."
+.     exit 2000
+. }
+
+. 
+. 
+. *==============================================================================*
+. * 4. VARIABLE CONSTRUCTION
+. *==============================================================================*
+. 
+. *--- 4a. FDI -----------------------------------------------------------------*
+. gen double fdi_raw = $FDIRAW if insample
+(9,146 missing values generated)
+
+. label var fdi_raw "$FDIRAW (raw, in sample)"
+
+. 
+. gen double fdi_w = fdi_raw
+(9,146 missing values generated)
+
+. 
+. if $WINSOR > 0 {
+.     local hi_p = 100 - $WINSOR
+.     qui _pctile fdi_raw if insample, p($WINSOR `hi_p')
+.     local lo = r(r1)
+.     local hi = r(r2)
+. 
+.     qui count if insample & fdi_raw < `lo' & !missing(fdi_raw)
+.     local n_lo = r(N)
+.     qui count if insample & fdi_raw > `hi' & !missing(fdi_raw)
+.     local n_hi = r(N)
+. 
+.     qui replace fdi_w = `lo' if insample & fdi_raw < `lo' & !missing(fdi_raw)
+.     qui replace fdi_w = `hi' if insample & fdi_raw > `hi' & !missing(fdi_raw)
+. 
+.     di as txt _n "FDI winsorised at ${WINSOR}% / `hi_p'%: [" ///
+>         %9.3f `lo' ", " %9.3f `hi' "]  (" `n_lo' " lower, " `n_hi' " upper)"
+
+FDI winsorised at 1% / 99%: [   -6.626,    30.520]  (104 lower, 104 upper)
+. }
+
+. label var fdi_w "$FDIRAW (winsorised)"
+
+. 
+. gen double y_fdi = asinh(fdi_w)
+(9,146 missing values generated)
+
+. label var y_fdi "IHS($FDIRAW)"
+
+. 
+. *--- 4b. Terror --------------------------------------------------------------*
+. gen double terr_raw = $TERRORRAW if insample
+(9,146 missing values generated)
+
+. 
+. if "$TERRORSCALE" == "permil" {
+.     qui replace terr_raw = terr_raw / (pop_lag / 1000000) ///
+>         if insample & pop_lag > 0 & !missing(pop_lag)
+.     qui replace terr_raw = . if insample & (missing(pop_lag) | pop_lag <= 0)
+.     label var terr_raw "$TERRORRAW per million inhabitants"
+. }
+
+. else {
+.     label var terr_raw "$TERRORRAW (count)"
+. }
+
+. 
+. if "$TERRORSMOOTH" == "ma4" {
+.     gen double terr_use = terr_raw + L1.terr_raw + L2.terr_raw + L3.terr_raw
+.     label var terr_use "4-quarter rolling sum of $TERRORRAW"
+. }
+
+. else {
+.     gen double terr_use = terr_raw
+(9,146 missing values generated)
+.     label var terr_use "$TERRORRAW"
+. }
+
+. 
+. gen double x_terr = asinh(terr_use)
+(9,146 missing values generated)
+
+. label var x_terr "IHS(terror)"
+
+. 
+. *--- 4c. Seasonal dummies ----------------------------------------------------*
+. qui tab quarter, gen(q_)
+
+. forvalues q = 1/4 {
+  2.     label var q_`q' "Q`q'"
+  3. }
+
+. 
+. *--- 4d. Differences ---------------------------------------------------------*
+. gen double d_y_fdi  = D.y_fdi
+(9,273 missing values generated)
+
+. gen double d_x_terr = D.x_terr
+(9,273 missing values generated)
+
+. label var d_y_fdi  "First difference of y_fdi"
+
+. label var d_x_terr "First difference of x_terr"
+
+. 
+. *--- 4e. Descriptives --------------------------------------------------------*
+. di as txt _n "{hline 78}"
+
+------------------------------------------------------------------------------
+
+. di as txt "Descriptives on the estimation sample"
+Descriptives on the estimation sample
+
+. di as txt "{hline 78}"
+------------------------------------------------------------------------------
+
+. sum fdi_raw fdi_w y_fdi terr_use x_terr if insample, detail
+
+              fdi_in_pct_qgdp (raw, in sample)
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%    -6.626396      -210.0047
+ 5%    -1.080019      -99.24237
+10%     .0652185      -65.83959       Obs              10,402
+25%     .9773129      -52.12252       Sum of wgt.      10,402
+
+50%      2.67843                      Mean           4.154955
+                        Largest       Std. dev.      8.923848
+75%      5.45055       117.0822
+90%     9.324732       134.8512       Variance       79.63506
+95%     12.93073       238.3186       Skewness       9.108244
+99%     30.51957       335.7861       Kurtosis        304.447
+
+                fdi_in_pct_qgdp (winsorised)
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%    -6.626396      -6.626396
+ 5%    -1.080019      -6.626396
+10%     .0652185      -6.626396       Obs              10,402
+25%     .9773129      -6.626396       Sum of wgt.      10,402
+
+50%      2.67843                      Mean           3.948695
+                        Largest       Std. dev.      5.220265
+75%      5.45055       30.51957
+90%     9.324732       30.51957       Variance       27.25116
+95%     12.93073       30.51957       Skewness       2.309231
+99%     30.51957       30.51957       Kurtosis       11.30306
+
+                    IHS(fdi_in_pct_qgdp)
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%    -2.589854      -2.589854
+ 5%    -.9368391      -2.589854
+10%     .0651723      -2.589854       Obs              10,402
+25%       .86524      -2.589854       Sum of wgt.      10,402
+
+50%     1.711534                      Mean            1.54694
+                        Largest       Std. dev.      1.255182
+75%     2.397175       4.111783
+90%      2.92868       4.111783       Variance       1.575482
+95%     3.254245       4.111783       Skewness      -.8798898
+99%     4.111783       4.111783       Kurtosis       4.220911
+
+                        attacks_total
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%            0              0
+ 5%            0              0
+10%            0              0       Obs              10,402
+25%            0              0       Sum of wgt.      10,402
+
+50%            0                      Mean           11.19208
+                        Largest       Std. dev.      54.94675
+75%            2            915
+90%           16           1122       Variance       3019.146
+95%           42           1129       Skewness       10.37564
+99%          230           1303       Kurtosis       145.7865
+
+                         IHS(terror)
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%            0              0
+ 5%            0              0
+10%            0              0       Obs              10,402
+25%            0              0       Sum of wgt.      10,402
+
+50%            0                      Mean           .9854046
+                        Largest       Std. dev.      1.569549
+75%     1.443635       7.512072
+90%     3.466711       7.716015       Variance       2.463484
+95%     4.430958       7.722235       Skewness       1.664224
+99%     6.131231       7.865572       Kurtosis       5.062416
+
+. 
+. qui count if insample & terr_use == 0
+
+. local nzero = r(N)
+
+. local zshare = 100 * `nzero' / `nobs'
+
+. di as txt _n "Zero share of the terror variable: " %5.1f `zshare' ///
+>     "% (" %7.0fc `nzero' " of " %7.0fc `nobs' ")"
+
+Zero share of the terror variable:  61.3% (  6,378 of  10,402)
+
+. if `zshare' > 85 {
+.     di as error "WARNING: more than 85% zeros. A linear PVAR on this variable"
+.     di as error "         is driven by a small number of country episodes."
+.     di as error "         Consider TERRORSMOOTH ma4 or a broader terror measure."
+. }
+
+. 
+. 
+. *==============================================================================*
+. * 5. DIAGNOSTIC 1 - COVERAGE AND GAP STRUCTURE
+. *==============================================================================*
+. preserve
+
+.     keep if insample
+(9,146 observations deleted)
+
+.     bysort id (t): gen int gap = t - t[_n-1] if _n > 1
+(123 missing values generated)
+
+. 
+.     di as txt _n "{hline 78}"
+
+------------------------------------------------------------------------------
+
+.     di as txt "Gap structure within the estimation sample"
+Gap structure within the estimation sample
+
+.     di as txt "{hline 78}"
+------------------------------------------------------------------------------
+
+.     tab gap, missing
+
+        gap |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          1 |     10,275       98.78       98.78
+          5 |          2        0.02       98.80
+         33 |          1        0.01       98.81
+         77 |          1        0.01       98.82
+          . |        123        1.18      100.00
+------------+-----------------------------------
+      Total |     10,402      100.00
+
+. 
+.     bysort id (t): gen byte newrun = (_n == 1 | gap != 1)
+
+.     bysort id (t): gen int  runid  = sum(newrun)
+
+.     bysort id runid: gen int runlen = _N
+
+.     bysort id: egen int maxrun = max(runlen)
+
+. 
+.     collapse (first) maxrun (count) nq = t (min) firstq = t (max) lastq = t, ///
+>         by(ISO3)
+
+.     gen str8 firsts = string(firstq, "%tq")
+
+.     gen str8 lasts  = string(lastq,  "%tq")
+
+. 
+.     di as txt _n "Countries by longest uninterrupted run:"
+
+Countries by longest uninterrupted run:
+
+.     foreach k in 8 12 20 28 40 60 {
+  2.         qui count if maxrun >= `k'
+  3.         di as txt "  >= `k' quarters: " %4.0f r(N)
+  4.     }
+  >= 8 quarters:  123
+  >= 12 quarters:  123
+  >= 20 quarters:  123
+  >= 28 quarters:  119
+  >= 40 quarters:  110
+  >= 60 quarters:   96
+
+. 
+.     qui count if maxrun < 12
+
+.     if r(N) > 0 {
+.         di as txt _n "Countries whose longest run is shorter than 12 quarters:"
+.         list ISO3 nq maxrun firsts lasts if maxrun < 12, noobs
+.     }
+
+.     else {
+.         di as txt _n "Every country has an uninterrupted run of >= 12 quarters."
+
+Every country has an uninterrupted run of >= 12 quarters.
+.     }
+
+. 
+.     keep ISO3 nq maxrun firsts lasts
+
+.     order ISO3 nq maxrun firsts lasts
+
+.     export delimited using "$TABLES/diag_coverage_${TAG}.csv", replace
+file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/diag_coverage_attacks_total_fdi_in_pct_qgdp_core.csv saved
+
+. restore
+
+. 
+. 
+. *==============================================================================*
+. * 6. DIAGNOSTIC 2 - CROSS-SECTIONAL DEPENDENCE (PESARAN CD)
+. *==============================================================================*
+. * Current xtcd2 reports four variants and stores them as MATRICES:
+. *   CD    Pesaran (2015, 2021)
+. *   CDw   Juodis & Reese (2021), randomised; conservative, low power
+. *   CDw+  CDw with power enhancement, Fan et al. (2015)
+. *   CD*   Pesaran & Xie (2021), defactored using principal components
+. *
+. * CD* is the informative one: if it still rejects after removing the
+. * principal components, the dependence goes beyond that many common factors.
+. * That matters twice over - CIPS (Pesaran 2007) corrects for ONE factor only,
+. * and the td option in pvar removes one common time effect only.
+. *
+. * Run on the RAW (non-demeaned) series: time demeaning is a model
+. * specification for robustness, not a preprocessing step.
+. 
+. capture postclose cdpost
+
+. postfile cdpost str12 variable double(cd cd_p cdw cdw_p cdwp cdwp_p cdstar cdstar_p) ///
+>     using "$TABLES/diag_cd_${TAG}.dta", replace
+
+. 
+. di as txt _n "{hline 78}"
+
+------------------------------------------------------------------------------
+
+. di as txt "Pesaran CD test (H0: weak cross-sectional dependence)"
+Pesaran CD test (H0: weak cross-sectional dependence)
+
+. di as txt "{hline 78}"
+------------------------------------------------------------------------------
+
+. 
+. foreach v in y_fdi x_terr d_y_fdi d_x_terr {
+  2. 
+.     di as txt _n "--- `v' ---"
+  3. 
+.     * Initialise every slot so that post always receives eight numbers.
+.     foreach s in cd cd_p cdw cdw_p cdwp cdwp_p cdstar cdstar_p {
+  4.         local `s' = .
+  5.     }
+  6. 
+.     cap noisily xtcd2 `v' if insample
+  7. 
+.     if _rc {
+  8.         di as error "  xtcd2 failed (rc = " _rc ")."
+  9.         di as error "  Older releases require xtcd2 to follow an xtreg fit:"
+ 10.         di as error "     qui xtreg `v' if insample, fe"
+ 11.         di as error "     xtcd2"
+ 12.         di as error "  Check with: which xtcd2"
+ 13.     }
+ 14.     else {
+ 15.         * Type-agnostic reading. r() may hold scalars OR matrices depending on
+.         * the installed version, so try the scalar route first and fall back to
+.         * the (1,1) element of a matrix.
+.         local names   "CD    p       CDw   pw      CDwp   pwp     CDstar   pstar"
+ 16.         local targets "cd    cd_p    cdw   cdw_p   cdwp   cdwp_p  cdstar   cdstar_p"
+ 17. 
+.         local k = 0
+ 18.         foreach nm of local names {
+ 19.             local ++k
+ 20.             local tgt : word `k' of `targets'
+ 21. 
+.             cap local `tgt' = r(`nm')
+ 22.             if _rc {
+ 23.                 tempname M
+ 24.                 cap matrix `M' = r(`nm')
+ 25.                 if !_rc {
+ 26.                     cap local `tgt' = `M'[1,1]
+ 27.                     if _rc local `tgt' = .
+ 28.                 }
+ 29.                 else local `tgt' = .
+ 30.             }
+ 31.         }
+ 32. 
+.         * Some releases name the power-enhanced variant differently.
+.         if missing(`cdwp') {
+ 33.             foreach nm in CDwplus CDw_plus CDwP {
+ 34.                 if missing(`cdwp') {
+ 35.                     cap local cdwp = r(`nm')
+ 36.                     if _rc {
+ 37.                         tempname M2
+ 38.                         cap matrix `M2' = r(`nm')
+ 39.                         if !_rc cap local cdwp = `M2'[1,1]
+ 40.                     }
+ 41.                 }
+ 42.             }
+ 43.         }
+ 44. 
+.         if missing(`cd') {
+ 45.             di as txt "  Could not read r(); the printed table above is authoritative."
+ 46.             di as txt "  r() contents for reference:"
+ 47.             return list
+ 48.         }
+ 49.     }
+ 50. 
+.     post cdpost ("`v'") (`cd') (`cd_p') (`cdw') (`cdw_p') ///
+>                 (`cdwp') (`cdwp_p') (`cdstar') (`cdstar_p')
+ 51. }
+
+--- y_fdi ---
+Unbalanced panel detected, test adjusted.
+
+Testing for weak cross-sectional dependence (CSD)
+   H0: weak cross-section dependence
+   H1: strong cross-section dependence
+------------------------------------------------------------------------
+               |    CD            CDw           CDw+          CD*
+---------------+--------------------------------------------------------
+y_fdi          |    89.34       -1.51       12226.42        23.72
+               |  (0.000)     (0.131)       (0.000)       (0.000)
+------------------------------------------------------------------------
+p-values in parenthesis.
+References
+  CD:        Pesaran (2015, 2021)
+  CDw:       Juodis, Reese (2021)
+  CDw+:      CDw with power enhancement from Fan et al. (2015)
+  CD*:       Pesaran, Xie (2021) with 4 PC(s)
+
+--- x_terr ---
+Unbalanced panel detected, test adjusted.
+
+Testing for weak cross-sectional dependence (CSD)
+   H0: weak cross-section dependence
+   H1: strong cross-section dependence
+------------------------------------------------------------------------
+               |    CD            CDw           CDw+          CD*
+---------------+--------------------------------------------------------
+x_terr         |    46.26       -1.40       7577.77         -5.83
+               |  (0.000)     (0.163)       (0.000)       (0.000)
+------------------------------------------------------------------------
+p-values in parenthesis.
+References
+  CD:        Pesaran (2015, 2021)
+  CDw:       Juodis, Reese (2021)
+  CDw+:      CDw with power enhancement from Fan et al. (2015)
+  CD*:       Pesaran, Xie (2021) with 4 PC(s)
+
+--- d_y_fdi ---
+Unbalanced panel detected, test adjusted.
+
+Testing for weak cross-sectional dependence (CSD)
+   H0: weak cross-section dependence
+   H1: strong cross-section dependence
+------------------------------------------------------------------------
+               |    CD            CDw           CDw+          CD*
+---------------+--------------------------------------------------------
+d_y_fdi        |     3.14        0.20       5437.83         -0.13
+               |  (0.002)     (0.838)       (0.000)       (0.898)
+------------------------------------------------------------------------
+p-values in parenthesis.
+References
+  CD:        Pesaran (2015, 2021)
+  CDw:       Juodis, Reese (2021)
+  CDw+:      CDw with power enhancement from Fan et al. (2015)
+  CD*:       Pesaran, Xie (2021) with 4 PC(s)
+
+--- d_x_terr ---
+Unbalanced panel detected, test adjusted.
+
+Testing for weak cross-sectional dependence (CSD)
+   H0: weak cross-section dependence
+   H1: strong cross-section dependence
+------------------------------------------------------------------------
+               |    CD            CDw           CDw+          CD*
+---------------+--------------------------------------------------------
+d_x_terr       |     5.92        2.33       4474.76         -0.56
+               |  (0.000)     (0.020)       (0.000)       (0.578)
+------------------------------------------------------------------------
+p-values in parenthesis.
+References
+  CD:        Pesaran (2015, 2021)
+  CDw:       Juodis, Reese (2021)
+  CDw+:      CDw with power enhancement from Fan et al. (2015)
+  CD*:       Pesaran, Xie (2021) with 4 PC(s)
+
+. postclose cdpost
+
+. 
+. preserve
+
+.     use "$TABLES/diag_cd_${TAG}.dta", clear
+
+.     format cd* %9.3f
+
+.     di as txt _n "CD summary"
+
+CD summary
+
+.     list variable cd cd_p cdstar cdstar_p, noobs
+
+  +-----------------------------------------------+
+  | variable       cd    cd_p   cdstar   cdstar_p |
+  |-----------------------------------------------|
+  |    y_fdi   89.338   0.000        .          . |
+  |   x_terr   46.261   0.000        .          . |
+  |  d_y_fdi    3.140   0.002        .          . |
+  | d_x_terr    5.923   0.000        .          . |
+  +-----------------------------------------------+
+
+.     export delimited using "$TABLES/diag_cd_${TAG}.csv", replace
+file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/diag_cd_attacks_total_fdi_in_pct_qgdp_core.csv saved
+
+. restore
+
+. 
+. 
+. *==============================================================================*
+. * 7. DIAGNOSTIC 3 - PANEL UNIT ROOT TESTS
+. *==============================================================================*
+. * IPS / Fisher-ADF : first generation, valid only under cross-sectional
+. *                    independence. Reported for comparison only.
+. * CIPS (pescadf)   : second generation, corrects for one common factor. Given
+. *                    the CD* result above, read it as the best available test,
+. *                    not as a definitive answer.
+. *
+. * IPS aborts on panels with zero variance; sparse terror variables produce
+. * exactly such panels, so those are excluded from the tests only.
+. 
+. di as txt _n "{hline 78}"
+
+------------------------------------------------------------------------------
+
+. di as txt "Panel unit root tests   (trend: ${URTREND}, lags: ${URLAGS})"
+Panel unit root tests   (trend: trend, lags: 4)
+
+. di as txt "{hline 78}"
+------------------------------------------------------------------------------
+
+. 
+. foreach v in y_fdi x_terr {
+  2.     bysort id: egen double _sd_`v' = sd(`v') if insample
+  3.     qui count if insample & (_sd_`v' == 0 | missing(_sd_`v'))
+  4.     if r(N) > 0 {
+  5.         di as txt _n "Note: `v' has no within-country variance in " ///
+>             %6.0fc r(N) " observations;"
+  6.         di as txt "      those panels are excluded from the unit-root tests only."
+  7.     }
+  8. }
+(9,146 missing values generated)
+(9,146 missing values generated)
+
+Note: x_terr has no within-country variance in    356 observations;
+      those panels are excluded from the unit-root tests only.
+
+. 
+. capture postclose urpost
+
+. postfile urpost str12 variable str8 test str8 trend double(stat pval) ///
+>     using "$TABLES/diag_unitroot_${TAG}.dta", replace
+
+. 
+. foreach v in y_fdi x_terr d_y_fdi d_x_terr {
+  2. 
+.     local base = subinstr("`v'", "d_", "", 1)
+  3.     di as txt _n "==== `v' ===="
+  4. 
+.     *--- IPS ---
+.     local st = .
+  5.     local pv = .
+  6.     cap noisily xtunitroot ips `v' if insample & _sd_`base' > 0 & !missing(_sd_`base'), ///
+>         lags($URLAGS) $URTREND demean
+  7.     if !_rc {
+  8.         foreach nm in Zttildebar Ztbar Wtbar tbar {
+  9.             if missing(`st') {
+ 10.                 cap local st = r(`nm')
+ 11.                 if _rc local st = .
+ 12.             }
+ 13.         }
+ 14.         foreach nm in p_Zttildebar p_Ztbar p_Wtbar {
+ 15.             if missing(`pv') {
+ 16.                 cap local pv = r(`nm')
+ 17.                 if _rc local pv = .
+ 18.             }
+ 19.         }
+ 20.         post urpost ("`v'") ("IPS") ("$URTREND") (`st') (`pv')
+ 21.     }
+ 22.     else di as error "  IPS failed (rc = " _rc ")"
+ 23. 
+.     *--- Fisher-ADF ---
+.     local st = .
+ 24.     local pv = .
+ 25.     cap noisily xtunitroot fisher `v' if insample & _sd_`base' > 0 & !missing(_sd_`base'), ///
+>         dfuller lags($URLAGS) $URTREND
+ 26.     if !_rc {
+ 27.         foreach nm in Zt Z P Pm {
+ 28.             if missing(`st') {
+ 29.                 cap local st = r(`nm')
+ 30.                 if _rc local st = .
+ 31.             }
+ 32.         }
+ 33.         foreach nm in p_Zt p_Z p_P p_Pm {
+ 34.             if missing(`pv') {
+ 35.                 cap local pv = r(`nm')
+ 36.                 if _rc local pv = .
+ 37.             }
+ 38.         }
+ 39.         post urpost ("`v'") ("Fisher") ("$URTREND") (`st') (`pv')
+ 40.     }
+ 41.     else di as error "  Fisher-ADF failed (rc = " _rc ")"
+ 42. 
+.     *--- CIPS ---
+.     local st = .
+ 43.     cap noisily pescadf `v' if insample & _sd_`base' > 0 & !missing(_sd_`base'), ///
+>         lags($URLAGS) $URTREND
+ 44.     if !_rc {
+ 45.         foreach nm in zt_bar cips tbar Zt_bar cipsstat {
+ 46.             if missing(`st') {
+ 47.                 cap local st = r(`nm')
+ 48.                 if _rc {
+ 49.                     tempname M3
+ 50.                     cap matrix `M3' = r(`nm')
+ 51.                     if !_rc cap local st = `M3'[1,1]
+ 52.                     if missing(`st') local st = .
+ 53.                 }
+ 54.             }
+ 55.         }
+ 56.         post urpost ("`v'") ("CIPS") ("$URTREND") (`st') (.)
+ 57.         if missing(`st') {
+ 58.             di as txt "  (CIPS statistic not machine-readable; take it and the"
+ 59.             di as txt "   critical values from the printed output above)"
+ 60.         }
+ 61.     }
+ 62.     else {
+ 63.         di as error "  pescadf failed (rc = " _rc ")"
+ 64.         di as error "  pescadf needs a reasonably balanced panel. If it aborts,"
+ 65.         di as error "  rerun on countries with maxrun >= 40 (see section 5)."
+ 66.     }
+ 67. }
+
+==== y_fdi ====
+
+Im–Pesaran–Shin unit-root test for y_fdi
+----------------------------------------
+H0: All panels contain unit roots           Number of panels       =    123
+Ha: Some panels are stationary              Avg. number of periods =  84.57
+
+AR parameter: Panel-specific                Asymptotics: T,N -> Infinity
+Panel means:  Included                                        sequentially
+Time trend:   Included                      Cross-sectional means removed
+
+ADF regressions: 4 lags
+------------------------------------------------------------------------------
+                    Statistic      p-value
+------------------------------------------------------------------------------
+ W-t-bar            -11.3677        0.0000
+------------------------------------------------------------------------------
+(9,146 missing values generated)
+
+Fisher-type unit-root test for y_fdi
+Based on augmented Dickey–Fuller tests
+--------------------------------------
+H0: All panels contain unit roots           Number of panels       =    123
+Ha: At least one panel is stationary        Avg. number of periods =  84.57
+
+AR parameter: Panel-specific                Asymptotics: T -> Infinity
+Panel means:  Included
+Time trend:   Included
+Drift term:   Not included                  ADF regressions: 4 lags
+------------------------------------------------------------------------------
+                                  Statistic      p-value
+------------------------------------------------------------------------------
+ Inverse chi-squared(246)  P       549.6200       0.0000
+ Inverse normal            Z        -9.7332       0.0000
+ Inverse logit t(614)      L*      -10.4777       0.0000
+ Modified inv. chi-squared Pm       13.6882       0.0000
+------------------------------------------------------------------------------
+ P statistic requires number of panels to be finite.
+ Other statistics are suitable for finite or infinite number of panels.
+------------------------------------------------------------------------------
+
+Number of gaps in sample = 4
+sample may not contain gaps
+
+Pesaran's CADF test for y_fdi
+Cross-sectional average in first period extracted and extreme t-values truncated
+Deterministics chosen: constant & trend
+panel is unbalanced, only standarized Ztbar statistic can be calculated
+
+Z[t-bar] test, (N,T1-T123) = (123, 51 36 104 108 108 108 64 88 28 108 108 108 80 100 80 108 108 58 108 108 64 20 100 88 108 88 108 40 28 108 40 108 108 76 108 84 108 108 96 40 48 56 104 108 20 68 108 
+> 65 108 108 108 32 108 108 108 36 108 100 104 108 108 108 24 104 76 44 108 108 100 108 72 108 72 108 100 107 56 64 36 88 88 32 108 108 108 83 108 92 108 108 108 84 108 84 36 108 108 60 100 60 88 56 6
+> 4 108 108 108 40 108 76 48 24 108 36 82 108 84 108 64 108 48 48 108 64)
+Obs = 9769    Augmented by 4 lags (average) 
+
+    Z[t-bar]  P-value
+   -7.826    0.000
+
+==== x_terr ====
+
+Im–Pesaran–Shin unit-root test for x_terr
+-----------------------------------------
+H0: All panels contain unit roots           Number of panels       =    117
+Ha: Some panels are stationary              Avg. number of periods =  85.86
+
+AR parameter: Panel-specific                Asymptotics: T,N -> Infinity
+Panel means:  Included                                        sequentially
+Time trend:   Included                      Cross-sectional means removed
+
+ADF regressions: 4 lags
+------------------------------------------------------------------------------
+                    Statistic      p-value
+------------------------------------------------------------------------------
+ W-t-bar             -7.7056        0.0000
+------------------------------------------------------------------------------
+(9,146 missing values generated)
+
+Fisher-type unit-root test for x_terr
+Based on augmented Dickey–Fuller tests
+--------------------------------------
+H0: All panels contain unit roots           Number of panels       =    117
+Ha: At least one panel is stationary        Avg. number of periods =  85.86
+
+AR parameter: Panel-specific                Asymptotics: T -> Infinity
+Panel means:  Included
+Time trend:   Included
+Drift term:   Not included                  ADF regressions: 4 lags
+------------------------------------------------------------------------------
+                                  Statistic      p-value
+------------------------------------------------------------------------------
+ Inverse chi-squared(234)  P       726.4465       0.0000
+ Inverse normal            Z       -13.5757       0.0000
+ Inverse logit t(584)      L*      -16.4094       0.0000
+ Modified inv. chi-squared Pm       22.7633       0.0000
+------------------------------------------------------------------------------
+ P statistic requires number of panels to be finite.
+ Other statistics are suitable for finite or infinite number of panels.
+------------------------------------------------------------------------------
+
+Number of gaps in sample = 4
+sample may not contain gaps
+
+Pesaran's CADF test for x_terr
+Cross-sectional average in first period extracted and extreme t-values truncated
+Deterministics chosen: constant & trend
+panel is unbalanced, only standarized Ztbar statistic can be calculated
+
+Z[t-bar] test, (N,T1-T117) = (117, 51 36 104 108 108 108 64 88 28 108 108 108 80 100 80 108 108 58 108 108 64 20 100 88 108 88 108 40 28 108 40 108 108 76 108 84 108 108 96 40 48 104 108 20 68 108 65 
+> 108 108 108 32 108 108 108 36 108 100 104 108 108 108 24 104 76 44 108 108 100 108 72 108 72 108 100 107 56 64 36 88 88 32 108 108 108 83 108 92 108 108 108 84 108 84 36 108 108 60 100 56 108 108 10
+> 8 108 76 24 108 36 82 108 84 108 64 108 48 48 108 64)
+Obs = 9443    Augmented by 4 lags (average) 
+
+    Z[t-bar]  P-value
+  -12.162    0.000
+
+==== d_y_fdi ====
+
+Im–Pesaran–Shin unit-root test for d_y_fdi
+------------------------------------------
+H0: All panels contain unit roots           Number of panels       =    123
+Ha: Some panels are stationary              Avg. number of periods =  83.54
+
+AR parameter: Panel-specific                Asymptotics: T,N -> Infinity
+Panel means:  Included                                        sequentially
+Time trend:   Included                      Cross-sectional means removed
+
+ADF regressions: 4 lags
+------------------------------------------------------------------------------
+                    Statistic      p-value
+------------------------------------------------------------------------------
+ W-t-bar            -47.4144        0.0000
+------------------------------------------------------------------------------
+(9,273 missing values generated)
+
+Fisher-type unit-root test for d_y_fdi
+Based on augmented Dickey–Fuller tests
+--------------------------------------
+H0: All panels contain unit roots           Number of panels       =    123
+Ha: At least one panel is stationary        Avg. number of periods =  83.54
+
+AR parameter: Panel-specific                Asymptotics: T -> Infinity
+Panel means:  Included
+Time trend:   Included
+Drift term:   Not included                  ADF regressions: 4 lags
+------------------------------------------------------------------------------
+                                  Statistic      p-value
+------------------------------------------------------------------------------
+ Inverse chi-squared(246)  P      2828.8175       0.0000
+ Inverse normal            Z       -43.6099       0.0000
+ Inverse logit t(619)      L*      -69.9147       0.0000
+ Modified inv. chi-squared Pm      116.4424       0.0000
+------------------------------------------------------------------------------
+ P statistic requires number of panels to be finite.
+ Other statistics are suitable for finite or infinite number of panels.
+------------------------------------------------------------------------------
+
+Number of gaps in sample = 4
+sample may not contain gaps
+
+Pesaran's CADF test for d_y_fdi
+Cross-sectional average in first period extracted and extreme t-values truncated
+Deterministics chosen: constant & trend
+panel is unbalanced, only standarized Ztbar statistic can be calculated
+
+Z[t-bar] test, (N,T1-T123) = (123, 50 35 103 107 107 107 63 87 27 107 107 107 79 99 79 107 107 57 107 107 63 19 99 87 107 87 107 39 27 107 39 107 107 74 107 83 107 107 95 39 47 55 102 107 19 67 107 64
+>  107 107 107 31 107 107 107 35 107 99 103 107 107 107 23 102 75 43 107 107 99 107 71 107 71 107 99 106 55 63 35 87 87 30 107 107 107 82 107 91 107 107 107 83 107 83 35 107 107 59 99 59 87 55 63 107 
+> 107 107 39 107 75 47 23 107 35 81 107 83 107 63 107 47 47 107 63)
+Obs = 9644    Augmented by 4 lags (average) 
+
+    Z[t-bar]  P-value
+  -37.112    0.000
+
+==== d_x_terr ====
+
+Im–Pesaran–Shin unit-root test for d_x_terr
+-------------------------------------------
+H0: All panels contain unit roots           Number of panels       =    117
+Ha: Some panels are stationary              Avg. number of periods =  84.83
+
+AR parameter: Panel-specific                Asymptotics: T,N -> Infinity
+Panel means:  Included                                        sequentially
+Time trend:   Included                      Cross-sectional means removed
+
+ADF regressions: 4 lags
+------------------------------------------------------------------------------
+                    Statistic      p-value
+------------------------------------------------------------------------------
+ W-t-bar            -47.3512        0.0000
+------------------------------------------------------------------------------
+(9,273 missing values generated)
+
+Fisher-type unit-root test for d_x_terr
+Based on augmented Dickey–Fuller tests
+---------------------------------------
+H0: All panels contain unit roots           Number of panels       =    117
+Ha: At least one panel is stationary        Avg. number of periods =  84.83
+
+AR parameter: Panel-specific                Asymptotics: T -> Infinity
+Panel means:  Included
+Time trend:   Included
+Drift term:   Not included                  ADF regressions: 4 lags
+------------------------------------------------------------------------------
+                                  Statistic      p-value
+------------------------------------------------------------------------------
+ Inverse chi-squared(234)  P      3171.5904       0.0000
+ Inverse normal            Z       -47.0425       0.0000
+ Inverse logit t(589)      L*      -80.6319       0.0000
+ Modified inv. chi-squared Pm      135.7902       0.0000
+------------------------------------------------------------------------------
+ P statistic requires number of panels to be finite.
+ Other statistics are suitable for finite or infinite number of panels.
+------------------------------------------------------------------------------
+
+Number of gaps in sample = 4
+sample may not contain gaps
+
+Pesaran's CADF test for d_x_terr
+Cross-sectional average in first period extracted and extreme t-values truncated
+Deterministics chosen: constant & trend
+panel is unbalanced, only standarized Ztbar statistic can be calculated
+
+Z[t-bar] test, (N,T1-T117) = (117, 50 35 103 107 107 107 63 87 27 107 107 107 79 99 79 107 107 57 107 107 63 19 99 87 107 87 107 39 27 107 39 107 107 74 107 83 107 107 95 39 47 102 107 19 67 107 64 10
+> 7 107 107 31 107 107 107 35 107 99 103 107 107 107 23 102 75 43 107 107 99 107 71 107 71 107 99 106 55 63 35 87 87 30 107 107 107 82 107 91 107 107 107 83 107 83 35 107 107 59 99 55 107 107 107 107 
+> 75 23 107 35 81 107 83 107 63 107 47 47 107 63)
+Obs = 9324    Augmented by 4 lags (average) 
+
+    Z[t-bar]  P-value
+  -38.587    0.000
+
+. 
+. postclose urpost
+
+. 
+. preserve
+
+.     use "$TABLES/diag_unitroot_${TAG}.dta", clear
+
+.     di as txt _n "{hline 78}"
+
+------------------------------------------------------------------------------
+
+.     di as txt "Unit root summary"
+Unit root summary
+
+.     di as txt "{hline 78}"
+------------------------------------------------------------------------------
+
+.     list, noobs sepby(variable)
+
+  +----------------------------------------------------+
+  | variable     test   trend         stat        pval |
+  |----------------------------------------------------|
+  |    y_fdi      IPS   trend            .           . |
+  |    y_fdi   Fisher   trend   -9.7331735   1.088e-22 |
+  |    y_fdi     CIPS   trend   -2.9522301           . |
+  |----------------------------------------------------|
+  |   x_terr      IPS   trend            .           . |
+  |   x_terr   Fisher   trend   -13.575711   2.790e-42 |
+  |   x_terr     CIPS   trend   -3.3081362           . |
+  |----------------------------------------------------|
+  |  d_y_fdi      IPS   trend            .           . |
+  |  d_y_fdi   Fisher   trend   -43.609933           0 |
+  |  d_y_fdi     CIPS   trend   -5.2019726           . |
+  |----------------------------------------------------|
+  | d_x_terr      IPS   trend            .           . |
+  | d_x_terr   Fisher   trend   -47.042492           0 |
+  | d_x_terr     CIPS   trend   -5.3880886           . |
+  +----------------------------------------------------+
+
+.     export delimited using "$TABLES/diag_unitroot_${TAG}.csv", replace
+file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/diag_unitroot_attacks_total_fdi_in_pct_qgdp_core.csv saved
+
+. restore
+
+. 
+. di as txt _n "{hline 78}"
+
+------------------------------------------------------------------------------
+
+. di as txt "How to read this"
+How to read this
+
+. di as txt "{hline 78}"
+------------------------------------------------------------------------------
+
+. di as txt "1. CD rejects independence, so base the integration decision on"
+1. CD rejects independence, so base the integration decision on
+
+. di as txt "   CIPS rather than on IPS or Fisher."
+   CIPS rather than on IPS or Fisher.
+
+. di as txt "2. CIPS reports a t-bar statistic. Compare it with the Pesaran"
+2. CIPS reports a t-bar statistic. Compare it with the Pesaran
+
+. di as txt "   (2007) critical values printed by pescadf. More negative than"
+   (2007) critical values printed by pescadf. More negative than
+
+. di as txt "   the critical value means a unit root is rejected."
+   the critical value means a unit root is rejected.
+
+. di as txt "3. If a level series carries a unit root but its first difference"
+3. If a level series carries a unit root but its first difference
+
+. di as txt "   does not, that variable enters the PVAR in differences."
+   does not, that variable enters the PVAR in differences.
+
+. di as txt "4. Because CD* still rejects after removing principal components,"
+4. Because CD* still rejects after removing principal components,
+
+. di as txt "   the dependence is multi-factor. CIPS corrects for one factor,"
+   the dependence is multi-factor. CIPS corrects for one factor,
+
+. di as txt "   so treat its verdict as indicative and report the td / no-td"
+   so treat its verdict as indicative and report the td / no-td
+
+. di as txt "   comparison in part 3 as a required robustness check."
+   comparison in part 3 as a required robustness check.
+
+. 
+. 
+. *==============================================================================*
+. * 8. SAVE THE WORKING FILE FOR PART 2
+. *==============================================================================*
+. cap drop _sd_*
+
+. compress
+  variable year was long now int
+  variable quarter was long now byte
+  variable has_fdi_observation was long now byte
+  variable has_gtd_row was long now byte
+  variable attacks_capital was long now int
+  variable attacks_capital_unknown was long now byte
+  variable attacks_outside_capital was long now int
+  variable attacks_outside_top3 was long now int
+  variable attacks_top3 was long now int
+  variable attacks_top3_unknown was long now byte
+  variable attacks_total was long now int
+  variable business_target_capital was long now int
+  variable business_target_capital_unknown was long now byte
+  variable business_target_outside_capital was long now byte
+  variable business_target_outside_top3 was long now byte
+  variable business_target_top3 was long now int
+  variable business_target_top3_unknown was long now byte
+  variable business_target_total was long now int
+  variable casualties_capital was long now int
+  variable casualties_capital_unknown was long now byte
+  variable casualties_outside_capital was long now int
+  variable casualties_outside_top3 was long now int
+  variable casualties_top3 was long now int
+  variable casualties_top3_unknown was long now int
+  variable casualties_total was long now int
+  variable fatalities_capital was long now int
+  variable fatalities_capital_unknown was long now byte
+  variable fatalities_outside_capital was long now int
+  variable fatalities_outside_top3 was long now int
+  variable fatalities_top3 was long now int
+  variable fatalities_top3_unknown was long now int
+  variable fatalities_total was long now int
+  variable missing_nkill_capital was long now byte
+  variable missing_nkill_capital_unknown was long now byte
+  variable missing_nkill_outside_capital was long now byte
+  variable missing_nkill_outside_top3 was long now byte
+  variable missing_nkill_top3 was long now byte
+  variable missing_nkill_top3_unknown was long now byte
+  variable missing_nkill_total was long now byte
+  variable missing_nwound_capital was long now byte
+  variable missing_nwound_capital_unknown was long now byte
+  variable missing_nwound_outside_capital was long now int
+  variable missing_nwound_outside_top3 was long now int
+  variable missing_nwound_top3 was long now byte
+  variable missing_nwound_top3_unknown was long now byte
+  variable missing_nwound_total was long now int
+  variable successful_capital was long now int
+  variable successful_capital_unknown was long now byte
+  variable successful_outside_capital was long now int
+  variable successful_outside_top3 was long now int
+  variable successful_top3 was long now int
+  variable successful_top3_unknown was long now byte
+  variable successful_total was long now int
+  variable wounded_capital was long now int
+  variable wounded_capital_unknown was long now byte
+  variable wounded_outside_capital was long now int
+  variable wounded_outside_top3 was long now int
+  variable wounded_top3 was long now int
+  variable wounded_top3_unknown was long now int
+  variable wounded_total was long now int
+  variable id was long now int
+  variable t was float now int
+  variable quarter_start_month was double now byte
+  variable period_index was double now int
+  variable has_fdi_inflow_musd was double now byte
+  variable has_fdi_outflow_musd was double now byte
+  variable has_fdi_net_imf_musd was double now byte
+  variable pop_lag was double now long
+  variable terrsum was double now int
+  variable terr_raw was double now int
+  variable terr_use was double now int
+  (4,007,340 bytes saved)
+
+. save "$DATA/pvar_q_work.dta", replace
+file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/data/processed/pvar_q_work.dta saved
+
+. 
+. di as txt _n "Saved working file: $DATA/pvar_q_work.dta"
+
+Saved working file: C:/Users/Benedikt/PycharmProjects/terror_and_fdi/data/processed/pvar_q_work.dta
+
+. di as txt "Tag for this configuration: ${TAG}"
+Tag for this configuration: attacks_total_fdi_in_pct_qgdp_core
+
+. 
+. log close
+      name:  <unnamed>
+       log:  C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/logs/pvar_q_01_attacks_total_fdi_in_pct_qgdp_core.log
+  log type:  text
+ closed on:  19 Aug 2026, 12:27:38
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

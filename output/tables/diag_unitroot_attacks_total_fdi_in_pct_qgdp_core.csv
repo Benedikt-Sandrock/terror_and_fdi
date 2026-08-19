@@ -1,0 +1,13 @@
+variable,test,trend,stat,pval
+y_fdi,IPS,trend,,
+y_fdi,Fisher,trend,-9.733173485396629,1.08846639055e-22
+y_fdi,CIPS,trend,-2.952230108823444,
+x_terr,IPS,trend,,
+x_terr,Fisher,trend,-13.57571134238645,2.78996666630e-42
+x_terr,CIPS,trend,-3.308136239605163,
+d_y_fdi,IPS,trend,,
+d_y_fdi,Fisher,trend,-43.60993328193907,0
+d_y_fdi,CIPS,trend,-5.201972589508056,
+d_x_terr,IPS,trend,,
+d_x_terr,Fisher,trend,-47.04249183988676,0
+d_x_terr,CIPS,trend,-5.388088612006246,

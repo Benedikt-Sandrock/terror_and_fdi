@@ -21,3 +21,13 @@ Run:
 2. clean_imf_bop_fdi_quarterly_optimized.py
 3. merge_fdi_gtd_quarterly_fixed.py
 
+
+Output: Dataset with GTD and FDI variables, ready to run reduced form regressions.
+
+
+=== ADDING OF CONTROLS ===
+Downloads:
+Run data_requests/gdp_download.py (downloads GDP and population data from WDI and WEO)
+
+Merge:
+1. Run merge_gdp_into_panel.py (merges GDP and population data to previously created GDT-FDI-Panel

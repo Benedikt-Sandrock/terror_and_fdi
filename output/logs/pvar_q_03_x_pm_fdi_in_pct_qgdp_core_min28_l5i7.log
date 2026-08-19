@@ -1,0 +1,850 @@
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/logs/pvar_q_03_x_pm_fdi_in_pct_qgdp_core_min28_l5i7.log
+  log type:  text
+ opened on:  19 Aug 2026, 15:10:03
+
+. 
+. 
+. *==============================================================================*
+. * 2. LOAD AND PREPARE
+. *==============================================================================*
+. use "$DATA/pvar_q_work.dta", clear
+
+. xtset id t
+
+Panel variable: id (strongly balanced)
+ Time variable: t, 1994q1 to 2020q4
+         Delta: 1 quarter
+
+. 
+. cap drop insample n_insample
+
+. gen byte insample = s_$SAMPLE
+
+. bysort id: egen int n_insample = total(insample)
+
+. qui replace insample = 0 if n_insample < $MINOBS
+
+. bysort id: egen int T_country = total(insample)
+
+. xtset id t
+
+Panel variable: id (strongly balanced)
+ Time variable: t, 1994q1 to 2020q4
+         Delta: 1 quarter
+
+. 
+. cap drop x_raw x_pm _pm
+
+. gen double x_raw = asinh($TERRORRAW) if insample
+(9,234 missing values generated)
+
+. gen double _pm = $TERRORRAW / (pop_lag / 1000000) ///
+>     if insample & pop_lag > 0 & !missing(pop_lag)
+(9,234 missing values generated)
+
+. gen double x_pm = asinh(_pm)
+(9,234 missing values generated)
+
+. label var x_raw "IHS(attacks)"
+
+. label var x_pm  "IHS(attacks per million)"
+
+. 
+. local SEAS "q_2 q_3 q_4"
+
+. 
+. qui count if insample
+
+. di as txt _n "Sample: " %7.0fc r(N) " obs"
+
+Sample:  10,314 obs
+
+. 
+. 
+. *==============================================================================*
+. * 3. SIDE CHECK - IS THE LAG-8 STRUCTURE IN THE DATA OR IN THE DENOMINATOR?
+. *==============================================================================*
+. * The part 2b residual test found autocorrelation at lag 8 in the FDI
+. * equation. Two candidate sources:
+. *   (a) the denominator, since lagged annual GDP divided by four is a step
+. *       function that is constant within a year;
+. *   (b) the IMF quarterly balance-of-payments data themselves, which many
+. *       countries derive by benchmarking or interpolating annual totals.
+. *
+. * The test: repeat the residual autocorrelation check on the UNNORMALISED
+. * inflow. If the lag-8 spike survives, it lives in the source data; if it
+. * disappears, the denominator introduced it. Either answer belongs in the
+. * data section of the thesis.
+. 
+. cap drop y_raw_musd
+
+. gen double y_raw_musd = asinh(fdi_inflow_musd) if insample
+(9,234 missing values generated)
+
+. label var y_raw_musd "IHS(FDI inflow, mn USD, unnormalised)"
+
+. 
+. di as txt _n "{hline 78}"
+
+------------------------------------------------------------------------------
+
+. di as txt "Residual autocorrelation: normalised vs unnormalised FDI"
+Residual autocorrelation: normalised vs unnormalised FDI
+
+. di as txt "{hline 78}"
+------------------------------------------------------------------------------
+
+. 
+. foreach dv in y_fdi y_raw_musd {
+  2.     di as txt _n "--- Dependent variable: `dv' ---"
+  3.     cap qui xtreg `dv' L(1/$P).`dv' L(1/$P).$TERRVAR i.t if insample, fe
+  4.     if _rc {
+  5.         di as error "  estimation failed (rc = " _rc ")"
+  6.         continue
+  7.     }
+  8.     cap drop _resid
+  9.     qui predict double _resid if e(sample), e
+ 10.     xtset id t
+ 11.     di as txt "   lag        b         se          t"
+ 12.     forvalues j = 1/8 {
+ 13.         cap qui xtreg _resid L`j'._resid if insample, fe
+ 14.         if _rc continue
+ 15.         di as txt %6.0f `j' %10.4f _b[L`j'._resid] %11.4f _se[L`j'._resid] ///
+>             %11.2f _b[L`j'._resid]/_se[L`j'._resid]
+ 16.     }
+ 17.     cap drop _resid
+ 18. }
+
+--- Dependent variable: y_fdi ---
+
+Panel variable: id (strongly balanced)
+ Time variable: t, 1994q1 to 2020q4
+         Delta: 1 quarter
+   lag        b         se          t
+     1   -0.0037     0.0103      -0.35
+     2   -0.0066     0.0104      -0.63
+     3   -0.0055     0.0105      -0.52
+     4   -0.0178     0.0107      -1.67
+     5   -0.0209     0.0108      -1.94
+     6    0.0157     0.0109       1.44
+     7   -0.0230     0.0110      -2.09
+     8    0.0759     0.0111       6.84
+
+--- Dependent variable: y_raw_musd ---
+
+Panel variable: id (strongly balanced)
+ Time variable: t, 1994q1 to 2020q4
+         Delta: 1 quarter
+   lag        b         se          t
+     1   -0.0042     0.0103      -0.40
+     2   -0.0062     0.0105      -0.59
+     3   -0.0080     0.0107      -0.76
+     4   -0.0168     0.0108      -1.55
+     5   -0.0197     0.0109      -1.80
+     6    0.0407     0.0110       3.69
+     7   -0.0108     0.0112      -0.97
+     8    0.0665     0.0113       5.91
+
+. di as txt _n "If the lag-8 spike persists without the GDP denominator, it is a"
+
+If the lag-8 spike persists without the GDP denominator, it is a
+
+. di as txt "property of the IMF quarterly series, not of our construction."
+property of the IMF quarterly series, not of our construction.
+
+. 
+. 
+. *==============================================================================*
+. * 4. MATA: IMPULSE RESPONSES COMPUTED DIRECTLY FROM e(b) AND e(Sigma)
+. *==============================================================================*
+. * pvarirf produces the baseline responses with confidence bands. For the
+. * robustness grid in section 8 the point estimates are computed here instead,
+. * so that the Cholesky ordering is under explicit control and no assumption
+. * about pvarirf internals is needed.
+. *
+. * Coefficient layout assumed (verified against the part 2 output):
+. *   e(b) runs equation by equation; within an equation, variable by variable
+. *   in system order; within a variable, lag 1 to lag p; exogenous regressors
+. *   last. Section 5 prints both this routine and pvarirf so the layout can be
+. *   checked before the grid is trusted.
+. 
+. capture mata: mata drop pvar_oirf()
+
+. mata:
+------------------------------------------------- mata (type end to exit) ------------------------------------------------------------------------------------------------------------------------------
+: void pvar_oirf(string scalar bname, string scalar signame,
+>                real scalar n, real scalar p, real scalar nex,
+>                real scalar H, real rowvector ordv, string scalar outname)
+> {
+>     real rowvector b
+>     real matrix Sig, Al, Psi, P0, S, L, OUT, Ph, Ih
+>     real scalar i, j, l, h, idx, lo, hi
+> 
+>     b   = st_matrix(bname)
+>     Sig = st_matrix(signame)
+> 
+>     // Companion blocks: Al holds A_1 ... A_p side by side, each n x n.
+>     Al = J(n, n*p, 0)
+>     for (i = 1; i <= n; i++) {
+>         for (j = 1; j <= n; j++) {
+>             for (l = 1; l <= p; l++) {
+>                 idx = (i-1)*(n*p + nex) + (j-1)*p + l
+>                 Al[i, (l-1)*n + j] = b[idx]
+>             }
+>         }
+>     }
+> 
+>     // Moving-average coefficients: Psi_0 = I, Psi_h = sum_l A_l Psi_(h-l).
+>     Psi = I(n)
+>     for (h = 1; h <= H; h++) {
+>         Ph = J(n, n, 0)
+>         for (l = 1; l <= min((h, p)); l++) {
+>             lo = (h-l)*n + 1
+>             hi = (h-l)*n + n
+>             Ph = Ph + Al[., ((l-1)*n+1)..((l-1)*n+n)] * Psi[., lo..hi]
+>         }
+>         Psi = (Psi, Ph)
+>     }
+> 
+>     // Cholesky factor in the requested ordering, permuted back.
+>     S  = Sig[ordv, ordv]
+>     L  = cholesky(S)
+>     P0 = J(n, n, 0)
+>     P0[ordv, ordv] = L
+> 
+>     // Row h+1 holds horizon h; columns are (shock s, response r) pairs.
+>     OUT = J(H+1, 1 + n*n, 0)
+>     for (h = 0; h <= H; h++) {
+>         lo = h*n + 1
+>         hi = h*n + n
+>         Ih = Psi[., lo..hi] * P0
+>         OUT[h+1, 1] = h
+>         for (i = 1; i <= n; i++) {
+>             for (j = 1; j <= n; j++) {
+>                 OUT[h+1, 1 + (j-1)*n + i] = Ih[i, j]
+>             }
+>         }
+>     }
+>     st_matrix(outname, OUT)
+> }
+
+: end
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+. 
+. 
+. *==============================================================================*
+. * 5. BASELINE ESTIMATION AND IMPULSE RESPONSES
+. *==============================================================================*
+. local XOPT = cond("$TD" == "", "exog(`SEAS')", "")
+
+. local NEX  = cond("$TD" == "", 3, 0)
+
+. 
+. di as txt _n "{hline 78}"
+
+------------------------------------------------------------------------------
+
+. di as txt "BASELINE: $ORDER, lags($P), instlags(1/$K), ${TD}"
+BASELINE: x_pm y_fdi, lags(5), instlags(1/7), td
+
+. di as txt "{hline 78}"
+------------------------------------------------------------------------------
+
+. 
+. pvar $ORDER if insample, lags($P) instlags(1/$K) `XOPT' $TD
+
+Panel vector autoregresssion
+
+
+
+GMM Estimation
+
+Final GMM Criterion Q(b) =    .00123
+Initial weight matrix: Identity
+GMM weight matrix:     Robust
+                                                   No. of obs      =      9340
+                                                   No. of panels   =       119
+                                                   Ave. no. of T   =    78.487
+
+
+------------------------------------------------------------------------------
+             | Coefficient  Std. err.      z    P>|z|     [95% conf. interval]
+-------------+----------------------------------------------------------------
+x_pm         |
+        x_pm |
+         L1. |   .3985028   .0376998    10.57   0.000     .3246126     .472393
+         L2. |   .1503474   .0306515     4.91   0.000     .0902715    .2104233
+         L3. |   .1094065    .028341     3.86   0.000     .0538592    .1649537
+         L4. |   .0440685   .0245176     1.80   0.072    -.0039852    .0921221
+         L5. |   .0554025   .0256896     2.16   0.031     .0050519    .1057531
+             |
+       y_fdi |
+         L1. |  -.0001772   .0020149    -0.09   0.930    -.0041263    .0037719
+         L2. |   .0012853   .0021631     0.59   0.552    -.0029543     .005525
+         L3. |  -.0014324   .0018879    -0.76   0.448    -.0051326    .0022678
+         L4. |  -.0019206   .0019743    -0.97   0.331      -.00579    .0019489
+         L5. |   .0005543   .0019415     0.29   0.775     -.003251    .0043596
+-------------+----------------------------------------------------------------
+y_fdi        |
+        x_pm |
+         L1. |   -.098919   .0564492    -1.75   0.080    -.2095574    .0117195
+         L2. |  -.0526939   .0481798    -1.09   0.274    -.1471247    .0417369
+         L3. |  -.0076991   .0531432    -0.14   0.885    -.1118579    .0964597
+         L4. |  -.0247335   .0509623    -0.49   0.627    -.1246177    .0751506
+         L5. |  -.0820163   .0448868    -1.83   0.068    -.1699929    .0059602
+             |
+       y_fdi |
+         L1. |    .175109   .0168825    10.37   0.000       .14202     .208198
+         L2. |   .1455336    .017416     8.36   0.000     .1113989    .1796683
+         L3. |   .1087335   .0167049     6.51   0.000     .0759925    .1414744
+         L4. |   .1827442   .0172837    10.57   0.000     .1488688    .2166196
+         L5. |   .0350091    .016256     2.15   0.031     .0031478    .0668703
+------------------------------------------------------------------------------
+Instruments : l(1/7).(x_pm y_fdi) 
+
+. 
+. local Jb  = e(J)
+
+. local Jdb = e(J_df)
+
+. di as txt _n "Hansen J = " %8.3f `Jb' "  df = " `Jdb' ///
+>     "  p = " %6.4f chi2tail(`Jdb', `Jb')
+
+Hansen J =   11.512  df = 8  p = 0.1743
+
+. 
+. estimates store base
+
+. cap estimates save "$ESTS/pvar_base_${TAG}.ster", replace
+
+. 
+. pvarstable
+
+   Eigenvalue stability condition
+
+  +----------------------------------+
+  |      Eigenvalue      |           |
+  |   Real     Imaginary |  Modulus  |
+  |----------------------+-----------|
+  |  .8797254          0 |  .8797254 |
+  |  .8480705          0 |  .8480705 |
+  |  .0313187  -.6037624 |  .6045741 |
+  |  .0313187   .6037624 |  .6045741 |
+  | -.5185832          0 |  .5185832 |
+  |  .1513846   .4783152 |  .5016998 |
+  |  .1513846  -.4783152 |  .5016998 |
+  | -.3875772    .310977 |  .4969133 |
+  | -.3875772   -.310977 |  .4969133 |
+  | -.2258531          0 |  .2258531 |
+  +----------------------------------+
+
+   All the eigenvalues lie inside the unit circle.
+   pVAR satisfies stability condition.
+
+. 
+. * Shock size in interpretable units: the orthogonalised shock to the first
+. * variable is one standard deviation of its reduced-form residual.
+. tempname SIG
+
+. matrix `SIG' = e(Sigma)
+
+. local sd_terr = sqrt(`SIG'[1,1])
+
+. local sd_fdi  = sqrt(`SIG'[2,2])
+
+. local rho     = `SIG'[1,2] / (`sd_terr' * `sd_fdi')
+
+. di as txt _n "Residual sd (terror) = " %6.4f `sd_terr' ///
+>     "   sd (FDI) = " %6.4f `sd_fdi' ///
+>     "   corr = " %6.4f `rho'
+
+Residual sd (terror) = 0.1969   sd (FDI) = 0.9581   corr = 0.0014
+
+. di as txt "A one-sd terror shock moves asinh(attacks per million) by " ///
+>     %5.3f `sd_terr' ", i.e. it multiplies attacks per million by about " ///
+>     %5.2f exp(`sd_terr') " away from zero."
+A one-sd terror shock moves asinh(attacks per million) by 0.197, i.e. it multiplies attacks per million by about  1.22 away from zero.
+
+. 
+. *--- Orthogonalised IRFs with Monte Carlo bands ------------------------------*
+. di as txt _n "--- Orthogonalised impulse responses, $MC draws ---"
+
+--- Orthogonalised impulse responses, 500 draws ---
+
+. cap noisily pvarirf, mc($MC) oirf porder($ORDER) step($STEP) level($LEVEL) ///
+>     byoption(yrescale) save("$TABLES/irf_baseline_${TAG}", replace)
+(file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/irf_baseline_x_pm_fdi_in_pct_qgdp_core_min28_l5i7.dta not found)
+file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/irf_baseline_x_pm_fdi_in_pct_qgdp_core_min28_l5i7.dta saved
+
+. if _rc {
+.     di as error "pvarirf failed (rc = " _rc ")."
+.     di as error "Try without save(), or reduce mc(). The Mata responses below"
+.     di as error "are computed independently and do not depend on pvarirf."
+. }
+
+. else {
+.     cap graph export "$FIGS/irf_${TAG}.png", replace width(1600)
+.     cap graph save "$FIGS/irf_${TAG}.gph", replace
+. }
+
+. 
+. *--- The same responses from the Mata routine, for verification --------------*
+. tempname IRF
+
+. mata: pvar_oirf("e(b)", "e(Sigma)", 2, $P, `NEX', $STEP, (1, 2), "`IRF'")
+
+. 
+. di as txt _n "{hline 78}"
+
+------------------------------------------------------------------------------
+
+. di as txt "Point estimates from the Mata routine (verify against pvarirf)"
+Point estimates from the Mata routine (verify against pvarirf)
+
+. di as txt "  column 2: terror shock -> terror"
+  column 2: terror shock -> terror
+
+. di as txt "  column 3: terror shock -> FDI      <- the response of interest"
+  column 3: terror shock -> FDI      <- the response of interest
+
+. di as txt "  column 4: FDI shock    -> terror"
+  column 4: FDI shock    -> terror
+
+. di as txt "  column 5: FDI shock    -> FDI"
+  column 5: FDI shock    -> FDI
+
+. di as txt "{hline 78}"
+------------------------------------------------------------------------------
+
+. di as txt %6s "h" %12s "terr->terr" %12s "terr->FDI" %12s "FDI->terr" ///
+>     %12s "FDI->FDI" %14s "cum terr->FDI"
+     h  terr->terr   terr->FDI   FDI->terr    FDI->FDI cum terr->FDI
+
+. 
+. local cum = 0
+
+. forvalues h = 1/`=rowsof(`IRF')' {
+  2.     local cum = `cum' + `IRF'[`h', 3]
+  3.     if inlist(`h'-1, 0, 1, 2, 3, 4, 8, 12, 16, 20) {
+  4.         di as txt %6.0f `IRF'[`h',1] %12.5f `IRF'[`h',2] %12.5f `IRF'[`h',3] ///
+>             %12.5f `IRF'[`h',4] %12.5f `IRF'[`h',5] %14.5f `cum'
+  5.     }
+  6. }
+     0     0.19692     0.00130     0.00000     0.95812       0.00130
+     1     0.07847    -0.01925    -0.00017     0.16778      -0.01795
+     2     0.06088    -0.02132     0.00113     0.16884      -0.03928
+     3     0.05758    -0.01807    -0.00076     0.15806      -0.05734
+     4     0.04937    -0.02250    -0.00204     0.24560      -0.07985
+     8     0.03081    -0.03107    -0.00119     0.10184      -0.21349
+    12     0.01812    -0.02676    -0.00092     0.05127      -0.33091
+    16     0.01068    -0.02009    -0.00069     0.02720      -0.42163
+    20     0.00630    -0.01410    -0.00048     0.01465      -0.48666
+
+. 
+. di as txt _n "If these differ from the pvarirf table, the assumed coefficient"
+
+If these differ from the pvarirf table, the assumed coefficient
+
+. di as txt "layout in section 4 is wrong and the grid in section 8 must not be"
+layout in section 4 is wrong and the grid in section 8 must not be
+
+. di as txt "used. They should agree to several decimals."
+used. They should agree to several decimals.
+
+. 
+. 
+. *==============================================================================*
+. * 6. IS THE CHOLESKY ORDERING INNOCUOUS?
+. *==============================================================================*
+. * Part 2 found a reduced-form residual correlation of about 0.02, which
+. * implies that A is nearly diagonal and the recursive assumption is close to
+. * irrelevant. This section demonstrates it instead of asserting it: the same
+. * estimates are used, only the ordering changes.
+. 
+. di as txt _n "{hline 78}"
+
+------------------------------------------------------------------------------
+
+. di as txt "Ordering check: terror first vs FDI first"
+Ordering check: terror first vs FDI first
+
+. di as txt "{hline 78}"
+------------------------------------------------------------------------------
+
+. 
+. tempname IRFR
+
+. mata: pvar_oirf("e(b)", "e(Sigma)", 2, $P, `NEX', $STEP, (2, 1), "`IRFR'")
+
+. 
+. di as txt %6s "h" %16s "terr->FDI (T1)" %16s "terr->FDI (F1)" %14s "difference"
+     h  terr->FDI (T1)  terr->FDI (F1)    difference
+
+. forvalues h = 1/`=rowsof(`IRF')' {
+  2.     if inlist(`h'-1, 0, 1, 2, 4, 8, 12, 20) {
+  3.         di as txt %6.0f `IRF'[`h',1] %16.5f `IRF'[`h',3] %16.5f `IRFR'[`h',3] ///
+>             %14.6f `IRF'[`h',3] - `IRFR'[`h',3]
+  4.     }
+  5. }
+     0         0.00130         0.00000      0.001298
+     1        -0.01925        -0.01948      0.000227
+     2        -0.02132        -0.02155      0.000229
+     4        -0.02250        -0.02283      0.000333
+     8        -0.03107        -0.03121      0.000138
+    12        -0.02676        -0.02683      0.000069
+    20        -0.01410        -0.01412      0.000020
+
+. di as txt _n "Differences confined to the impact horizon and small thereafter"
+
+Differences confined to the impact horizon and small thereafter
+
+. di as txt "mean the identification assumption is doing very little work."
+mean the identification assumption is doing very little work.
+
+. 
+. cap noisily pvarirf, mc($MC) oirf porder(y_fdi $TERRVAR) step($STEP) ///
+>     level($LEVEL) byoption(yrescale)
+
+. cap graph export "$FIGS/irf_reverse_${TAG}.png", replace width(1600)
+
+. 
+. 
+. *==============================================================================*
+. * 7. FORECAST ERROR VARIANCE DECOMPOSITION
+. *==============================================================================*
+. * How much of the forecast error variance of FDI is attributable to terror
+. * innovations? This is the natural companion to the IRF: the IRF gives the
+. * shape of the response, the FEVD its economic weight.
+. 
+. di as txt _n "{hline 78}"
+
+------------------------------------------------------------------------------
+
+. di as txt "Forecast error variance decomposition"
+Forecast error variance decomposition
+
+. di as txt "{hline 78}"
+------------------------------------------------------------------------------
+
+. 
+. cap noisily estimates restore base
+(results base are active now)
+
+. cap noisily pvarfevd, step($STEP) porder($ORDER)
+
+Forecast-error variance decomposition
+
+------------------------------
+Response  |
+variable  |
+and       |
+Forecast  |  Impulse variable 
+horizon   |     x_pm     y_fdi
+----------+-------------------
+x_pm      |
+        0 |        0         0
+        1 |        1         0
+        2 | .9999993  6.41e-07
+        3 | .9999729   .000027
+        4 | .9999636  .0000364
+        5 | .9998885  .0001115
+        6 |  .999885  .0001149
+        7 | .9998776  .0001224
+        8 | .9998632  .0001368
+        9 | .9998419  .0001581
+       10 | .9998257  .0001744
+       11 | .9998125  .0001875
+       12 | .9997994  .0002006
+       13 |  .999787  .0002131
+       14 | .9997761  .0002239
+       15 | .9997668  .0002332
+       16 | .9997587  .0002413
+       17 | .9997517  .0002483
+       18 | .9997457  .0002543
+       19 | .9997407  .0002593
+       20 | .9997365  .0002635
+----------+-------------------
+y_fdi     |
+        0 |        0         0
+        1 | 1.83e-06  .9999982
+        2 | .0003934  .9996066
+        3 | .0008477  .9991522
+        4 | .0011525  .9988475
+        5 | .0015634  .9984366
+        6 | .0029193  .9970807
+        7 | .0038404  .9961595
+        8 | .0046782  .9953218
+        9 | .0054909   .994509
+       10 | .0063523  .9936477
+       11 | .0071359   .992864
+       12 | .0078163  .9921837
+       13 | .0084199  .9915802
+       14 | .0089597  .9910403
+       15 | .0094286  .9905714
+       16 | .0098294  .9901706
+       17 | .0101703  .9898297
+       18 | .0104596  .9895405
+       19 | .0107028  .9892972
+       20 | .0109057  .9890943
+------------------------------
+
+. if _rc {
+.     di as error "pvarfevd failed (rc = " _rc "); trying without porder()."
+.     cap noisily pvarfevd, step($STEP)
+. }
+
+. 
+. 
+. *==============================================================================*
+. * 8. ROBUSTNESS GRID
+. *==============================================================================*
+. * Every cell reports the two gatekeepers alongside the response, so that a
+. * specification which fails them can be identified rather than silently
+. * averaged into the picture. The response reported is the cumulative
+. * orthogonalised response of FDI to a one-sd terror shock after 4, 8 and 20
+. * quarters.
+. 
+. capture postclose rob
+
+. postfile rob str10 terrvar int(lags ilags) str4 tdopt str14 subsample ///
+>     double(nobs jstat jdf jp maxmod r4 r8 r20) ///
+>     using "$TABLES/irf_robustness_${TAG}.dta", replace
+(file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/irf_robustness_x_pm_fdi_in_pct_qgdp_core_min28_l5i7.dta not found)
+
+. 
+. di as txt _n "{hline 110}"
+
+--------------------------------------------------------------------------------------------------------------
+
+. di as txt "Robustness grid"
+Robustness grid
+
+. di as txt "{hline 110}"
+--------------------------------------------------------------------------------------------------------------
+
+. di as txt %9s "terror" %5s "lag" %5s "ins" %5s "td" %13s "sample" %9s "obs" ///
+>     %9s "J p" %8s "maxmod" %10s "cum h=4" %10s "cum h=8" %10s "cum h=20"
+   terror  lag  ins   td       sample      obs      J p  maxmod   cum h=4   cum h=8  cum h=20
+
+. 
+. local grid `" "x_pm|5|7|td|all|insample" "x_pm|8|10|td|all|insample" "x_pm|5|7||all|insample" "x_raw|5|7|td|all|insample" "x_raw|8|10|td|all|insample" "x_pm|5|7|td|longT|insample & T_country>=80" "x
+> _pm|5|7|td|nonzero|insample & terrsum>0" "x_pm|5|7|td|exc_highinc|insample & gdp_lag_usd/pop_lag < 20000" "'
+
+. 
+. foreach g of local grid {
+  2. 
+.     tokenize "`g'", parse("|")
+  3.     local tv   "`1'"
+  4.     local lg   "`3'"
+  5.     local il   "`5'"
+  6.     local tdo  "`7'"
+  7.     local slab "`9'"
+  8.     local scnd "`11'"
+  9. 
+.     local xo   = cond("`tdo'" == "", "exog(`SEAS')", "")
+ 10.     local nx   = cond("`tdo'" == "", 3, 0)
+ 11.     local tdl  = cond("`tdo'" == "", "notd", "td")
+ 12. 
+.     cap pvar `tv' y_fdi if `scnd', lags(`lg') instlags(1/`il') `xo' `tdo'
+ 13.     if _rc {
+ 14.         di as error "  `tv' l`lg' `tdl' `slab': estimation failed"
+ 15.         continue
+ 16.     }
+ 17. 
+.     local nb  = e(N)
+ 18.     local js  = e(J)
+ 19.     local jd  = e(J_df)
+ 20.     local jpv = cond(missing(`js') | missing(`jd') | `jd' <= 0, ., ///
+>                      chi2tail(`jd', `js'))
+ 21. 
+.     local mm = .
+ 22.     cap pvarstable
+ 23.     if !_rc {
+ 24.         tempname MD
+ 25.         cap matrix `MD' = r(Modulus)
+ 26.         if _rc cap matrix `MD' = r(modulus)
+ 27.         if !_rc {
+ 28.             local mm = 0
+ 29.             forvalues rr = 1/`=rowsof(`MD')' {
+ 30.                 forvalues cc = 1/`=colsof(`MD')' {
+ 31.                     if `MD'[`rr',`cc'] > `mm' & !missing(`MD'[`rr',`cc']) {
+ 32.                         local mm = `MD'[`rr',`cc']
+ 33.                     }
+ 34.                 }
+ 35.             }
+ 36.         }
+ 37.     }
+ 38. 
+.     tempname G
+ 39.     cap mata: pvar_oirf("e(b)", "e(Sigma)", 2, `lg', `nx', 20, (1, 2), "`G'")
+ 40.     if _rc {
+ 41.         di as error "  `tv' l`lg' `tdl' `slab': IRF computation failed"
+ 42.         continue
+ 43.     }
+ 44. 
+.     local c4 = 0
+ 45.     local c8 = 0
+ 46.     local c20 = 0
+ 47.     forvalues h = 1/21 {
+ 48.         local c20 = `c20' + `G'[`h', 3]
+ 49.         if `h' <= 5  local c4  = `c4'  + `G'[`h', 3]
+ 50.         if `h' <= 9  local c8  = `c8'  + `G'[`h', 3]
+ 51.     }
+ 52. 
+.     di as txt %9s "`tv'" %5.0f `lg' %5.0f `il' %5s "`tdl'" %13s "`slab'" ///
+>         %9.0fc `nb' %9.4f `jpv' %8.3f `mm' %10.5f `c4' %10.5f `c8' %10.5f `c20'
+ 53. 
+.     post rob ("`tv'") (`lg') (`il') ("`tdl'") ("`slab'") (`nb') ///
+>         (`js') (`jd') (`jpv') (`mm') (`c4') (`c8') (`c20')
+ 54. }
+     x_pm    5    7   td          all    9,340   0.1743   0.880  -0.07985  -0.21349  -0.48666
+     x_pm    8   10   td          all    8,977   0.2481   0.924  -0.06556  -0.15923  -0.43219
+  x_pm l5 td |: estimation failed
+    x_raw    5    7   td          all    9,340   0.0196   0.852  -0.11982  -0.32282  -0.69184
+    x_raw    8   10   td          all    8,977   0.0816   0.915  -0.14171  -0.37411  -1.09493
+     x_pm    5    7   td        longT    7,670   0.1568   0.855  -0.05244  -0.16223  -0.37100
+     x_pm    5    7   td      nonzero    9,032   0.1170   0.879  -0.08019  -0.21302  -0.48019
+     x_pm    5    7   td  exc_highinc    7,426   0.7183   0.894  -0.07949  -0.18745  -0.42519
+
+. postclose rob
+
+. 
+. preserve
+
+.     use "$TABLES/irf_robustness_${TAG}.dta", clear
+
+.     format jstat maxmod r4 r8 r20 %9.4f
+
+.     format jp %6.4f
+
+.     di as txt _n "Robustness summary"
+
+Robustness summary
+
+.     list, noobs
+
+  +---------------------------------------------------------------------------------------------------------------------+
+  | terrvar   lags   ilags   tdopt     subsample   nobs     jstat   jdf       jp   maxmod        r4        r8       r20 |
+  |---------------------------------------------------------------------------------------------------------------------|
+  |    x_pm      5       7      td           all   9340   11.5125     8   0.1743   0.8797   -0.0798   -0.2135   -0.4867 |
+  |    x_pm      8      10      td           all   8977   10.2479     8   0.2481   0.9240   -0.0656   -0.1592   -0.4322 |
+  |   x_raw      5       7      td           all   9340   18.2322     8   0.0196   0.8524   -0.1198   -0.3228   -0.6918 |
+  |   x_raw      8      10      td           all   8977   14.0052     8   0.0816   0.9152   -0.1417   -0.3741   -1.0949 |
+  |    x_pm      5       7      td         longT   7670   11.8767     8   0.1568   0.8547   -0.0524   -0.1622   -0.3710 |
+  |---------------------------------------------------------------------------------------------------------------------|
+  |    x_pm      5       7      td       nonzero   9032   12.8527     8   0.1170   0.8786   -0.0802   -0.2130   -0.4802 |
+  |    x_pm      5       7      td   exc_highinc   7426    5.3622     8   0.7183   0.8935   -0.0795   -0.1875   -0.4252 |
+  +---------------------------------------------------------------------------------------------------------------------+
+
+.     export delimited using "$TABLES/irf_robustness_${TAG}.csv", replace
+(file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/irf_robustness_x_pm_fdi_in_pct_qgdp_core_min28_l5i7.csv not found)
+file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/irf_robustness_x_pm_fdi_in_pct_qgdp_core_min28_l5i7.csv saved
+
+. restore
+
+. 
+. 
+. *==============================================================================*
+. * 9. HOW TO READ AND REPORT THIS
+. *==============================================================================*
+. di as txt _n "{hline 78}"
+
+------------------------------------------------------------------------------
+
+. di as txt "Interpretation"
+Interpretation
+
+. di as txt "{hline 78}"
+------------------------------------------------------------------------------
+
+. di as txt "1. Units. Both variables are inverse hyperbolic sine transforms, so"
+1. Units. Both variables are inverse hyperbolic sine transforms, so
+
+. di as txt "   a response of -0.05 means roughly a five percent change in the"
+   a response of -0.05 means roughly a five percent change in the
+
+. di as txt "   FDI-to-GDP ratio, and only away from zero. Near zero the"
+   FDI-to-GDP ratio, and only away from zero. Near zero the
+
+. di as txt "   semi-elasticity reading breaks down; say so rather than"
+   semi-elasticity reading breaks down; say so rather than
+
+. di as txt "   quietly reporting percentages."
+   quietly reporting percentages.
+
+. di as txt ""
+
+
+. di as txt "2. What the shock is. An orthogonalised innovation is the part of"
+2. What the shock is. An orthogonalised innovation is the part of
+
+. di as txt "   terror that the history of the system does not predict. It is"
+   terror that the history of the system does not predict. It is
+
+. di as txt "   not an exogenous shock. Any omitted driver of both series sits"
+   not an exogenous shock. Any omitted driver of both series sits
+
+. di as txt "   inside it, which is why the bivariate system limits what can be"
+   inside it, which is why the bivariate system limits what can be
+
+. di as txt "   claimed. Report it as a conditional dynamic association."
+   claimed. Report it as a conditional dynamic association.
+
+. di as txt ""
+
+
+. di as txt "3. Bands. The Monte Carlo intervals reflect coefficient"
+3. Bands. The Monte Carlo intervals reflect coefficient
+
+. di as txt "   uncertainty only. They do not cover the choice of lag order,"
+   uncertainty only. They do not cover the choice of lag order,
+
+. di as txt "   sample or terror measure; the grid in section 8 does that."
+   sample or terror measure; the grid in section 8 does that.
+
+. di as txt ""
+
+
+. di as txt "4. Report together, always: the response, Hansen J with its p"
+4. Report together, always: the response, Hansen J with its p
+
+. di as txt "   value, the instrument count, the largest eigenvalue modulus and"
+   value, the instrument count, the largest eigenvalue modulus and
+
+. di as txt "   the number of countries and observations. A specification that"
+   the number of countries and observations. A specification that
+
+. di as txt "   fails a gatekeeper belongs in the table with a flag, not in a"
+   fails a gatekeeper belongs in the table with a flag, not in a
+
+. di as txt "   drawer."
+   drawer.
+
+. di as txt ""
+
+
+. di as txt "5. The td comparison is a result, not a nuisance. Without time"
+5. The td comparison is a result, not a nuisance. Without time
+
+. di as txt "   demeaning the part 2 Granger tests were strongly significant;"
+   demeaning the part 2 Granger tests were strongly significant;
+
+. di as txt "   with it they were marginal. Common global shocks account for"
+   with it they were marginal. Common global shocks account for
+
+. di as txt "   most of the raw association, and that finding is worth stating"
+   most of the raw association, and that finding is worth stating
+
+. di as txt "   explicitly."
+   explicitly.
+
+. 
+. log close
+      name:  <unnamed>
+       log:  C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/logs/pvar_q_03_x_pm_fdi_in_pct_qgdp_core_min28_l5i7.log
+  log type:  text
+ closed on:  19 Aug 2026, 15:12:40
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

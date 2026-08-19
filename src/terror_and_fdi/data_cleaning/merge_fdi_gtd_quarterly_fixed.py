@@ -43,15 +43,8 @@ MERGE_KEYS = ["ISO3", "year", "quarter"]
 # Only columns matching these prefixes are automatically interpreted as
 # terrorism counts/sums and filled with zero in no-attack quarters.
 TERROR_PREFIXES = (
-    "incidents_",
-    "attacks_",
-    "fatalities_",
-    "deaths_",
-    "killed_",
-    "wounded_",
-    "injured_",
-    "hostages_",
-    "casualties_",
+    "attacks_", "successful_", "fatalities_", "wounded_",
+    "casualties_", "business_target_", "missing_nkill_", "missing_nwound_",
 )
 
 # Exact variable names can be added here if they do not use a prefix above.

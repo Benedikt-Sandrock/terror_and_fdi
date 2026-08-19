@@ -1,0 +1,592 @@
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/logs/pvar_q_02b_attacks_total_fdi_in_pct_qgdp_core_min28.log
+  log type:  text
+ opened on:  19 Aug 2026, 14:50:58
+
+. 
+. 
+. *==============================================================================*
+. * 2. LOAD, REBUILD SAMPLE, BUILD VARIANT VARIABLES
+. *==============================================================================*
+. use "$DATA/pvar_q_work.dta", clear
+
+. xtset id t
+
+Panel variable: id (strongly balanced)
+ Time variable: t, 1994q1 to 2020q4
+         Delta: 1 quarter
+
+. 
+. cap drop insample n_insample
+
+. gen byte insample = s_$SAMPLE
+
+. bysort id: egen int n_insample = total(insample)
+
+. qui replace insample = 0 if n_insample < $MINOBS
+
+. bysort id: egen int T_country = total(insample)
+
+. 
+. qui count if insample
+
+. local nobs = r(N)
+
+. qui levelsof id if insample, local(ids)
+
+. local ncty = wordcount("`ids'")
+
+. di as txt _n "Base sample: " %7.0fc `nobs' " obs, `ncty' countries"
+
+Base sample:  10,314 obs, 119 countries
+
+. 
+. local SEAS "q_2 q_3 q_4"
+
+. 
+. *--- Terror variants ---------------------------------------------------------*
+. * x_raw : IHS of the quarterly count            (baseline, 61% zeros)
+. * x_ma4 : IHS of the rolling 4-quarter sum      (reduces the zero mass)
+. * x_bin : indicator, any attack this quarter    (removes the count scale)
+. * x_pm  : IHS of attacks per million people     (removes size heterogeneity)
+. cap drop x_raw x_ma4 x_bin x_pm
+
+. gen double x_raw = asinh($TERRORRAW) if insample
+(9,234 missing values generated)
+
+. 
+. gen double _ma4 = $TERRORRAW + L1.$TERRORRAW + L2.$TERRORRAW + L3.$TERRORRAW ///
+>     if insample
+(9,411 missing values generated)
+
+. gen double x_ma4 = asinh(_ma4)
+(9,411 missing values generated)
+
+. 
+. gen double x_bin = ($TERRORRAW > 0) if insample & !missing($TERRORRAW)
+(9,234 missing values generated)
+
+. 
+. gen double _pm = $TERRORRAW / (pop_lag / 1000000) ///
+>     if insample & pop_lag > 0 & !missing(pop_lag)
+(9,234 missing values generated)
+
+. gen double x_pm = asinh(_pm)
+(9,234 missing values generated)
+
+. 
+. label var x_raw "IHS(count)"
+
+. label var x_ma4 "IHS(4-quarter sum)"
+
+. label var x_bin "Any attack (0/1)"
+
+. label var x_pm  "IHS(count per million)"
+
+. 
+. di as txt _n "Zero / mass-point share of each terror variant:"
+
+Zero / mass-point share of each terror variant:
+
+. foreach v in x_raw x_ma4 x_bin x_pm {
+  2.     qui count if insample & `v' == 0
+  3.     local z = r(N)
+  4.     qui count if insample & !missing(`v')
+  5.     di as txt "  " %-8s "`v'" ": " %5.1f 100*`z'/r(N) "% at zero"
+  6. }
+  x_raw   :  61.3% at zero
+  x_ma4   :  42.6% at zero
+  x_bin   :  61.3% at zero
+  x_pm    :  61.3% at zero
+
+. 
+. *--- Country-level grouping variables ---------------------------------------*
+. cap drop gdppc_c terr_c
+
+. gen double _gdppc = gdp_lag_usd / pop_lag if insample & pop_lag > 0
+(9,234 missing values generated)
+
+. bysort id: egen double gdppc_c = mean(_gdppc)
+(6,696 missing values generated)
+
+. bysort id: egen double terr_c  = mean($TERRORRAW) if insample
+(9,234 missing values generated)
+
+. bysort id: egen double terr_cm = max(terr_c)
+(6,696 missing values generated)
+
+. drop terr_c
+
+. rename terr_cm terr_c
+
+. 
+. * Terciles are formed across COUNTRIES, not observations, so that a country
+. * never appears in two groups.
+. preserve
+
+.     keep if insample
+(9,234 observations deleted)
+
+.     collapse (first) gdppc_c terr_c, by(id)
+
+.     xtile g_inc  = gdppc_c, nq(3)
+
+.     xtile g_terr = terr_c,  nq(3)
+
+.     keep id g_inc g_terr
+
+.     tempfile groups
+
+.     save `groups'
+file C:\Users\Benedikt\AppData\Local\Temp\ST_5768_000002.tmp saved as .dta format
+
+. restore
+
+. merge m:1 id using `groups', nogen keep(master match)
+(label id already defined)
+
+    Result                      Number of obs
+    -----------------------------------------
+    Not matched                         6,696
+        from master                     6,696  
+        from using                          0  
+
+    Matched                            12,852  
+    -----------------------------------------
+
+. 
+. di as txt _n "Countries per group:"
+
+Countries per group:
+
+. preserve
+
+.     keep if insample
+(9,234 observations deleted)
+
+.     collapse (first) g_inc g_terr, by(id)
+
+.     tab g_inc
+
+    (first) |
+      g_inc |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          1 |         40       33.61       33.61
+          2 |         40       33.61       67.23
+          3 |         39       32.77      100.00
+------------+-----------------------------------
+      Total |        119      100.00
+
+.     tab g_terr
+
+    (first) |
+     g_terr |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          1 |         40       33.61       33.61
+          2 |         40       33.61       67.23
+          3 |         39       32.77      100.00
+------------+-----------------------------------
+      Total |        119      100.00
+
+. restore
+
+. 
+. 
+. *==============================================================================*
+. * 2b. HELPER: estimate one PVAR and return its diagnostics
+. *==============================================================================*
+. capture program drop pvarj
+
+. program define pvarj, rclass
+  1.     syntax varlist(min=2) [if], LAGs(integer) ILAgs(integer) ///
+>         [TIMEdemean EXOGvars(string)]
+  2. 
+.     local xopt ""
+  3.     if "`exogvars'" != "" local xopt "exog(`exogvars')"
+  4.     local tdopt ""
+  5.     if "`timedemean'" != "" local tdopt "td"
+  6. 
+.     tempname J Jdf MOD
+  7.     scalar `J'   = .
+  8.     scalar `Jdf' = .
+  9. 
+.     cap pvar `varlist' `if', lags(`lags') instlags(1/`ilags') `xopt' `tdopt'
+ 10.     if _rc {
+ 11.         return scalar ok = 0
+ 12.         return scalar rc = _rc
+ 13.         exit
+ 14.     }
+ 15. 
+.     scalar `J'   = e(J)
+ 16.     scalar `Jdf' = e(J_df)
+ 17.     local Nobs   = e(N)
+ 18. 
+.     * Largest eigenvalue modulus.
+.     local maxmod = .
+ 19.     cap pvarstable
+ 20.     if !_rc {
+ 21.         cap matrix `MOD' = r(Modulus)
+ 22.         if _rc cap matrix `MOD' = r(modulus)
+ 23.         if !_rc {
+ 24.             local maxmod = 0
+ 25.             forvalues rr = 1/`=rowsof(`MOD')' {
+ 26.                 forvalues cc = 1/`=colsof(`MOD')' {
+ 27.                     if `MOD'[`rr',`cc'] > `maxmod' & !missing(`MOD'[`rr',`cc']) {
+ 28.                         local maxmod = `MOD'[`rr',`cc']
+ 29.                     }
+ 30.                 }
+ 31.             }
+ 32.         }
+ 33.     }
+ 34. 
+.     return scalar ok     = 1
+ 35.     return scalar N      = `Nobs'
+ 36.     return scalar J      = `J'
+ 37.     return scalar Jdf    = `Jdf'
+ 38.     return scalar Jp     = cond(missing(`J') | missing(`Jdf') | `Jdf' <= 0, ., ///
+>                                 chi2tail(`Jdf', `J'))
+ 39.     return scalar maxmod = `maxmod'
+ 40. end
+
+. 
+. 
+. *==============================================================================*
+. * 3. DIAGNOSTIC A - DOES J KEEP FALLING WITH MORE LAGS?
+. *==============================================================================*
+. * In part 2, J fell monotonically to lag 5 and rose again at lag 6. If the
+. * problem were simply omitted dynamics, J should decline monotonically until
+. * the lag structure is adequate. A U shape points elsewhere.
+. 
+. capture postclose dA
+
+. postfile dA int(lags ilags) str4 tdopt double(nobs jstat jdf jp maxmod) ///
+>     using "$TABLES/diagJ_lags_${TAG}.dta", replace
+(file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/diagJ_lags_attacks_total_fdi_in_pct_qgdp_core_min28.dta not found)
+
+. 
+. di as txt _n "{hline 78}"
+
+------------------------------------------------------------------------------
+
+. di as txt "A. Lag profile of Hansen's J, extended to $MAXLAG lags"
+A. Lag profile of Hansen's J, extended to 8 lags
+
+. di as txt "{hline 78}"
+------------------------------------------------------------------------------
+
+. di as txt %5s "lags" %6s "td" %10s "obs" %11s "J" %5s "df" %10s "p" %9s "maxmod"
+ lags    td       obs          J   df         p   maxmod
+
+. 
+. foreach td in "" "timedemean" {
+  2.     local tdlab = cond("`td'" == "", "notd", "td")
+  3.     local xo    = cond("`td'" == "", "`SEAS'", "")
+  4. 
+.     forvalues p = 1/$MAXLAG {
+  5.         local k = `p' + $INSTEXTRA
+  6.         cap pvarj x_raw y_fdi if insample, lags(`p') ilags(`k') ///
+>             `td' exogvars(`xo')
+  7.         if _rc | r(ok) == 0 {
+  8.             di as error "  lags(`p') `tdlab': failed"
+  9.             continue
+ 10.         }
+ 11.         di as txt %5.0f `p' %6s "`tdlab'" %10.0fc r(N) %11.2f r(J) ///
+>             %5.0f r(Jdf) %10.4f r(Jp) %9.3f r(maxmod)
+ 12.         post dA (`p') (`k') ("`tdlab'") (r(N)) (r(J)) (r(Jdf)) (r(Jp)) (r(maxmod))
+ 13.     }
+ 14. }
+    1  notd     9,826     365.19    8    0.0000    0.443
+    2  notd     9,703     293.73    8    0.0000    0.711
+    3  notd     9,582     183.82    8    0.0000    0.838
+    4  notd     9,461      42.89    8    0.0000    0.919
+    5  notd     9,340      30.61    8    0.0002    0.940
+    6  notd     9,219      55.62    8    0.0000    0.955
+    7  notd     9,098      59.20    8    0.0000    0.958
+    8  notd     8,977      26.62    8    0.0008    0.980
+    1    td     9,826     298.06    8    0.0000    0.271
+    2    td     9,703     252.03    8    0.0000    0.586
+    3    td     9,582     167.41    8    0.0000    0.731
+    4    td     9,461      36.16    8    0.0000    0.845
+    5    td     9,340      18.23    8    0.0196    0.852
+    6    td     9,219      46.36    8    0.0000    0.883
+    7    td     9,098      48.74    8    0.0000    0.886
+    8    td     8,977      14.01    8    0.0816    0.915
+
+. postclose dA
+
+. 
+. preserve
+
+.     use "$TABLES/diagJ_lags_${TAG}.dta", clear
+
+.     export delimited using "$TABLES/diagJ_lags_${TAG}.csv", replace
+(file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/diagJ_lags_attacks_total_fdi_in_pct_qgdp_core_min28.csv not found)
+file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/diagJ_lags_attacks_total_fdi_in_pct_qgdp_core_min28.csv saved
+
+. restore
+
+. 
+. 
+. *==============================================================================*
+. * 4. DIAGNOSTIC B - IS THE ZERO MASS THE PROBLEM?
+. *==============================================================================*
+. * 61% of x_raw is exactly zero. A linear autoregression on a variable with a
+. * large mass point produces errors that are neither homoskedastic nor free of
+. * structure, which can invalidate the moment conditions on its own. If J
+. * improves sharply for x_ma4 or x_bin, that channel is identified.
+. 
+. capture postclose dB
+
+. postfile dB str8 terrvar int lags double(nobs zeroshare jstat jdf jp maxmod) ///
+>     using "$TABLES/diagJ_terror_${TAG}.dta", replace
+(file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/diagJ_terror_attacks_total_fdi_in_pct_qgdp_core_min28.dta not found)
+
+. 
+. di as txt _n "{hline 78}"
+
+------------------------------------------------------------------------------
+
+. di as txt "B. Terror measure and Hansen's J (lags $REFLAG, td)"
+B. Terror measure and Hansen's J (lags 5, td)
+
+. di as txt "{hline 78}"
+------------------------------------------------------------------------------
+
+. di as txt %9s "variable" %10s "obs" %9s "%zero" %11s "J" %5s "df" %10s "p" %9s "maxmod"
+ variable       obs    %zero          J   df         p   maxmod
+
+. 
+. local k = $REFLAG + $INSTEXTRA
+
+. foreach v in x_raw x_ma4 x_bin x_pm {
+  2. 
+.     qui count if insample & `v' == 0
+  3.     local z = r(N)
+  4.     qui count if insample & !missing(`v')
+  5.     local zs = 100 * `z' / r(N)
+  6. 
+.     cap pvarj `v' y_fdi if insample, lags($REFLAG) ilags(`k') timedemean
+  7.     if _rc | r(ok) == 0 {
+  8.         di as error "  `v': failed"
+  9.         continue
+ 10.     }
+ 11.     di as txt %9s "`v'" %10.0fc r(N) %9.1f `zs' %11.2f r(J) ///
+>         %5.0f r(Jdf) %10.4f r(Jp) %9.3f r(maxmod)
+ 12.     post dB ("`v'") ($REFLAG) (r(N)) (`zs') (r(J)) (r(Jdf)) (r(Jp)) (r(maxmod))
+ 13. }
+    x_raw     9,340     61.3      18.23    8    0.0196    0.852
+    x_ma4     9,169     42.6      61.92    8    0.0000    0.995
+    x_bin     9,340     61.3      24.46    8    0.0019    0.858
+     x_pm     9,340     61.3      11.51    8    0.1743    0.880
+
+. postclose dB
+
+. 
+. preserve
+
+.     use "$TABLES/diagJ_terror_${TAG}.dta", clear
+
+.     export delimited using "$TABLES/diagJ_terror_${TAG}.csv", replace
+(file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/diagJ_terror_attacks_total_fdi_in_pct_qgdp_core_min28.csv not found)
+file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/diagJ_terror_attacks_total_fdi_in_pct_qgdp_core_min28.csv saved
+
+. restore
+
+. 
+. 
+. *==============================================================================*
+. * 5. DIAGNOSTIC C1 - DOES J IMPROVE IN MORE HOMOGENEOUS SUBSAMPLES?
+. *==============================================================================*
+. * If pooling heterogeneous dynamics is what breaks the moment conditions, then
+. * J should improve within groups of similar countries. Note that J also falls
+. * mechanically with sample size, so read the p-value together with the number
+. * of observations: a p-value that rises while N falls by a third is weak
+. * evidence; a p-value that rises sharply on a similar N is strong evidence.
+. 
+. capture postclose dC
+
+. postfile dC str14 subsample double(ncty nobs jstat jdf jp maxmod) ///
+>     using "$TABLES/diagJ_subsamples_${TAG}.dta", replace
+(file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/diagJ_subsamples_attacks_total_fdi_in_pct_qgdp_core_min28.dta not found)
+
+. 
+. di as txt _n "{hline 78}"
+
+------------------------------------------------------------------------------
+
+. di as txt "C1. Subsamples (lags $REFLAG, td, x_raw)"
+C1. Subsamples (lags 5, td, x_raw)
+
+. di as txt "{hline 78}"
+------------------------------------------------------------------------------
+
+. di as txt %15s "subsample" %7s "cty" %10s "obs" %11s "J" %5s "df" %10s "p" %9s "maxmod"
+      subsample    cty       obs          J   df         p   maxmod
+
+. 
+. local k = $REFLAG + $INSTEXTRA
+
+. 
+. * Label, condition
+. local subs `" "all|insample" "inc_low|insample & g_inc==1" "inc_mid|insample & g_inc==2" "inc_high|insample & g_inc==3" "terr_low|insample & g_terr==1" "terr_mid|insample & g_terr==2" "terr_high|ins
+> ample & g_terr==3" "longT|insample & T_country>=$VERYLONGT" "nonzero_terr|insample & terrsum>0" "'
+
+. 
+. foreach s of local subs {
+  2.     local lab  = substr("`s'", 1, strpos("`s'", "|") - 1)
+  3.     local cond = substr("`s'", strpos("`s'", "|") + 1, .)
+  4. 
+.     qui count if `cond'
+  5.     local n_s = r(N)
+  6.     if `n_s' < 500 {
+  7.         di as error "  `lab': only `n_s' observations, skipped"
+  8.         continue
+  9.     }
+ 10.     qui levelsof id if `cond', local(sids)
+ 11.     local c_s = wordcount("`sids'")
+ 12. 
+.     cap pvarj x_raw y_fdi if `cond', lags($REFLAG) ilags(`k') timedemean
+ 13.     if _rc | r(ok) == 0 {
+ 14.         di as error "  `lab': estimation failed"
+ 15.         continue
+ 16.     }
+ 17.     di as txt %15s "`lab'" %7.0f `c_s' %10.0fc r(N) %11.2f r(J) ///
+>         %5.0f r(Jdf) %10.4f r(Jp) %9.3f r(maxmod)
+ 18.     post dC ("`lab'") (`c_s') (r(N)) (r(J)) (r(Jdf)) (r(Jp)) (r(maxmod))
+ 19. }
+            all    119     9,340      18.23    8    0.0196    0.852
+        inc_low     40     2,862       5.79    8    0.6710    0.911
+        inc_mid     40     2,846      14.10    8    0.0793    0.910
+       inc_high     39     3,632      17.52    8    0.0252    0.848
+       terr_low     40     2,947      21.34    8    0.0063    0.923
+       terr_mid     40     3,264      19.13    8    0.0142    0.803
+      terr_high     39     3,129      11.02    8    0.2006    0.911
+          longT     81     7,670      17.59    8    0.0245    0.854
+   nonzero_terr    113     9,032      20.02    8    0.0102    0.852
+
+. postclose dC
+
+. 
+. preserve
+
+.     use "$TABLES/diagJ_subsamples_${TAG}.dta", clear
+
+.     export delimited using "$TABLES/diagJ_subsamples_${TAG}.csv", replace
+(file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/diagJ_subsamples_attacks_total_fdi_in_pct_qgdp_core_min28.csv not found)
+file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/diagJ_subsamples_attacks_total_fdi_in_pct_qgdp_core_min28.csv saved
+
+. restore
+
+. 
+. 
+. *==============================================================================*
+. * 6. DIAGNOSTIC D - RESIDUAL SERIAL CORRELATION, MEASURED DIRECTLY
+. *==============================================================================*
+. * Hansen's J detects a violation but not which one. Lagged instruments are
+. * valid only if the idiosyncratic errors are serially uncorrelated, so that
+. * assumption is worth testing on its own rather than inferring it from J.
+. *
+. * The pvar suite offers no Arellano-Bond test, so the test is run on LSDV
+. * residuals: estimate each equation with country and time fixed effects, then
+. * regress the residual on its own lags with country effects. At T of about 80
+. * the Nickell bias in the LSDV residuals is small enough for this to be
+. * informative.
+. 
+. di as txt _n "{hline 78}"
+
+------------------------------------------------------------------------------
+
+. di as txt "D. Serial correlation in LSDV residuals (lags $REFLAG)"
+D. Serial correlation in LSDV residuals (lags 5)
+
+. di as txt "{hline 78}"
+------------------------------------------------------------------------------
+
+. 
+. foreach dv in x_raw y_fdi {
+  2.     local other = cond("`dv'" == "x_raw", "y_fdi", "x_raw")
+  3. 
+.     di as txt _n "--- Equation: `dv' ---"
+  4.     cap noisily qui xtreg `dv' L(1/$REFLAG).`dv' L(1/$REFLAG).`other' i.t ///
+>         if insample, fe
+  5.     if _rc {
+  6.         di as error "  LSDV estimation failed (rc = " _rc ")"
+  7.         continue
+  8.     }
+  9. 
+.     cap drop resid_`dv'
+ 10.     qui predict double resid_`dv' if e(sample), e
+ 11. 
+.     forvalues j = 1/4 {
+ 12.         qui xtreg resid_`dv' L`j'.resid_`dv' if insample, fe
+ 13.         local b  = _b[L`j'.resid_`dv']
+ 14.         local se = _se[L`j'.resid_`dv']
+ 15.         local tt = `b' / `se'
+ 16.         di as txt "  AR(`j') on residuals: b = " %8.4f `b' ///
+>             "  se = " %7.4f `se' "  t = " %7.2f `tt'
+ 17.     }
+ 18.     di as txt "  A coefficient near zero supports the moment conditions."
+ 19.     di as txt "  Persistent nonzero values mean lagged levels are not valid"
+ 20.     di as txt "  instruments, whatever the lag order."
+ 21. }
+
+--- Equation: x_raw ---
+not sorted
+  LSDV estimation failed (rc = 5)
+
+--- Equation: y_fdi ---
+not sorted
+  LSDV estimation failed (rc = 5)
+
+. 
+. 
+. *==============================================================================*
+. * 7. DIAGNOSTIC C2 - POOLABILITY AND MEAN GROUP
+. *==============================================================================*
+. * The most direct test of slope homogeneity. Country-by-country equations are
+. * estimated for countries with at least $LONGT quarters, and:
+. *   (a) an F test compares the pooled residual sum of squares with the sum of
+. *       the country-specific ones (Chow / poolability);
+. *   (b) the Mean Group estimate (Pesaran & Smith 1995) is the simple average
+. *       of the country coefficients, with standard error sd/sqrt(N). Under
+. *       homogeneity MG and the pooled estimate agree; under heterogeneity the
+. *       pooled dynamic estimate is inconsistent and MG is not.
+. 
+. di as txt _n "{hline 78}"
+
+------------------------------------------------------------------------------
+
+. di as txt "C2. Poolability and Mean Group, FDI equation, lags $REFLAG"
+C2. Poolability and Mean Group, FDI equation, lags 5
+
+. di as txt "  countries with at least $LONGT quarters"
+  countries with at least 60 quarters
+
+. di as txt "{hline 78}"
+------------------------------------------------------------------------------
+
+. 
+. qui levelsof id if insample & T_country >= $LONGT, local(longids)
+
+. local nlong = wordcount("`longids'")
+
+. di as txt "  Countries entering: `nlong'"
+  Countries entering: 96
+
+. 
+. * Pooled (restricted) model on exactly the same countries.
+. tempvar touse
+
+. gen byte `touse' = insample & T_country >= $LONGT
+
+. 
+. qui reg y_fdi L(1/$REFLAG).y_fdi L(1/$REFLAG).x_raw i.id i.t if `touse'
+not sorted
+r(5);
+
+end of do-file
+
+r(5);
+
+. exit, clear
