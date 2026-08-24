@@ -31,3 +31,16 @@ Run data_requests/gdp_download.py (downloads GDP and population data from WDI an
 
 Merge:
 1. Run merge_gdp_into_panel.py (merges GDP and population data to previously created GDT-FDI-Panel
+
+
+=== Stata Analysis ===
+-> files are in "stata_code"
+run: "pvar_q_02b_diagnostics_J_v2.do"
+    - creating sample flags (full, nospe, core, terror)
+    - coverage diagnostics (time series w/o gaps per country)
+    (- Cross-sectional dependence, unit-root tests)
+
+run: "pvar_q_04_screening.do"
+    - Variable level: cross-sectional dependence, stationarity
+    - System level: Hansen's J, largest eigenvalue modulus of the companion matrix
+    Output: Decision table

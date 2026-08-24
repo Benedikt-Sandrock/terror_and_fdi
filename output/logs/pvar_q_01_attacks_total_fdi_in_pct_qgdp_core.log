@@ -2,7 +2,7 @@
       name:  <unnamed>
        log:  C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/logs/pvar_q_01_attacks_total_fdi_in_pct_qgdp_core.log
   log type:  text
- opened on:  19 Aug 2026, 12:27:07
+ opened on:  24 Aug 2026, 10:39:06
 
 . 
 . 
@@ -442,22 +442,15 @@ file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/diag_coverag
 . * Run on the RAW (non-demeaned) series: time demeaning is a model
 . * specification for robustness, not a preprocessing step.
 . 
+. if $RUN_DIAGNOSTICS == 1 {
+. 
 . capture postclose cdpost
-
 . postfile cdpost str12 variable double(cd cd_p cdw cdw_p cdwp cdwp_p cdstar cdstar_p) ///
 >     using "$TABLES/diag_cd_${TAG}.dta", replace
-
 . 
 . di as txt _n "{hline 78}"
-
-------------------------------------------------------------------------------
-
 . di as txt "Pesaran CD test (H0: weak cross-sectional dependence)"
-Pesaran CD test (H0: weak cross-sectional dependence)
-
 . di as txt "{hline 78}"
-------------------------------------------------------------------------------
-
 . 
 . foreach v in y_fdi x_terr d_y_fdi d_x_terr {
   2. 
@@ -525,112 +518,15 @@ Pesaran CD test (H0: weak cross-sectional dependence)
 .     post cdpost ("`v'") (`cd') (`cd_p') (`cdw') (`cdw_p') ///
 >                 (`cdwp') (`cdwp_p') (`cdstar') (`cdstar_p')
  51. }
-
---- y_fdi ---
-Unbalanced panel detected, test adjusted.
-
-Testing for weak cross-sectional dependence (CSD)
-   H0: weak cross-section dependence
-   H1: strong cross-section dependence
-------------------------------------------------------------------------
-               |    CD            CDw           CDw+          CD*
----------------+--------------------------------------------------------
-y_fdi          |    89.34       -1.51       12226.42        23.72
-               |  (0.000)     (0.131)       (0.000)       (0.000)
-------------------------------------------------------------------------
-p-values in parenthesis.
-References
-  CD:        Pesaran (2015, 2021)
-  CDw:       Juodis, Reese (2021)
-  CDw+:      CDw with power enhancement from Fan et al. (2015)
-  CD*:       Pesaran, Xie (2021) with 4 PC(s)
-
---- x_terr ---
-Unbalanced panel detected, test adjusted.
-
-Testing for weak cross-sectional dependence (CSD)
-   H0: weak cross-section dependence
-   H1: strong cross-section dependence
-------------------------------------------------------------------------
-               |    CD            CDw           CDw+          CD*
----------------+--------------------------------------------------------
-x_terr         |    46.26       -1.40       7577.77         -5.83
-               |  (0.000)     (0.163)       (0.000)       (0.000)
-------------------------------------------------------------------------
-p-values in parenthesis.
-References
-  CD:        Pesaran (2015, 2021)
-  CDw:       Juodis, Reese (2021)
-  CDw+:      CDw with power enhancement from Fan et al. (2015)
-  CD*:       Pesaran, Xie (2021) with 4 PC(s)
-
---- d_y_fdi ---
-Unbalanced panel detected, test adjusted.
-
-Testing for weak cross-sectional dependence (CSD)
-   H0: weak cross-section dependence
-   H1: strong cross-section dependence
-------------------------------------------------------------------------
-               |    CD            CDw           CDw+          CD*
----------------+--------------------------------------------------------
-d_y_fdi        |     3.14        0.20       5437.83         -0.13
-               |  (0.002)     (0.838)       (0.000)       (0.898)
-------------------------------------------------------------------------
-p-values in parenthesis.
-References
-  CD:        Pesaran (2015, 2021)
-  CDw:       Juodis, Reese (2021)
-  CDw+:      CDw with power enhancement from Fan et al. (2015)
-  CD*:       Pesaran, Xie (2021) with 4 PC(s)
-
---- d_x_terr ---
-Unbalanced panel detected, test adjusted.
-
-Testing for weak cross-sectional dependence (CSD)
-   H0: weak cross-section dependence
-   H1: strong cross-section dependence
-------------------------------------------------------------------------
-               |    CD            CDw           CDw+          CD*
----------------+--------------------------------------------------------
-d_x_terr       |     5.92        2.33       4474.76         -0.56
-               |  (0.000)     (0.020)       (0.000)       (0.578)
-------------------------------------------------------------------------
-p-values in parenthesis.
-References
-  CD:        Pesaran (2015, 2021)
-  CDw:       Juodis, Reese (2021)
-  CDw+:      CDw with power enhancement from Fan et al. (2015)
-  CD*:       Pesaran, Xie (2021) with 4 PC(s)
-
 . postclose cdpost
-
 . 
 . preserve
-
 .     use "$TABLES/diag_cd_${TAG}.dta", clear
-
 .     format cd* %9.3f
-
 .     di as txt _n "CD summary"
-
-CD summary
-
 .     list variable cd cd_p cdstar cdstar_p, noobs
-
-  +-----------------------------------------------+
-  | variable       cd    cd_p   cdstar   cdstar_p |
-  |-----------------------------------------------|
-  |    y_fdi   89.338   0.000        .          . |
-  |   x_terr   46.261   0.000        .          . |
-  |  d_y_fdi    3.140   0.002        .          . |
-  | d_x_terr    5.923   0.000        .          . |
-  +-----------------------------------------------+
-
 .     export delimited using "$TABLES/diag_cd_${TAG}.csv", replace
-file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/diag_cd_attacks_total_fdi_in_pct_qgdp_core.csv saved
-
 . restore
-
 . 
 . 
 . *==============================================================================*
@@ -646,15 +542,8 @@ file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/diag_cd_atta
 . * exactly such panels, so those are excluded from the tests only.
 . 
 . di as txt _n "{hline 78}"
-
-------------------------------------------------------------------------------
-
 . di as txt "Panel unit root tests   (trend: ${URTREND}, lags: ${URLAGS})"
-Panel unit root tests   (trend: trend, lags: 4)
-
 . di as txt "{hline 78}"
-------------------------------------------------------------------------------
-
 . 
 . foreach v in y_fdi x_terr {
   2.     bysort id: egen double _sd_`v' = sd(`v') if insample
@@ -665,18 +554,10 @@ Panel unit root tests   (trend: trend, lags: 4)
   6.         di as txt "      those panels are excluded from the unit-root tests only."
   7.     }
   8. }
-(9,146 missing values generated)
-(9,146 missing values generated)
-
-Note: x_terr has no within-country variance in    356 observations;
-      those panels are excluded from the unit-root tests only.
-
 . 
 . capture postclose urpost
-
 . postfile urpost str12 variable str8 test str8 trend double(stat pval) ///
 >     using "$TABLES/diag_unitroot_${TAG}.dta", replace
-
 . 
 . foreach v in y_fdi x_terr d_y_fdi d_x_terr {
   2. 
@@ -755,325 +636,34 @@ Note: x_terr has no within-country variance in    356 observations;
  65.         di as error "  rerun on countries with maxrun >= 40 (see section 5)."
  66.     }
  67. }
-
-==== y_fdi ====
-
-Im–Pesaran–Shin unit-root test for y_fdi
-----------------------------------------
-H0: All panels contain unit roots           Number of panels       =    123
-Ha: Some panels are stationary              Avg. number of periods =  84.57
-
-AR parameter: Panel-specific                Asymptotics: T,N -> Infinity
-Panel means:  Included                                        sequentially
-Time trend:   Included                      Cross-sectional means removed
-
-ADF regressions: 4 lags
-------------------------------------------------------------------------------
-                    Statistic      p-value
-------------------------------------------------------------------------------
- W-t-bar            -11.3677        0.0000
-------------------------------------------------------------------------------
-(9,146 missing values generated)
-
-Fisher-type unit-root test for y_fdi
-Based on augmented Dickey–Fuller tests
---------------------------------------
-H0: All panels contain unit roots           Number of panels       =    123
-Ha: At least one panel is stationary        Avg. number of periods =  84.57
-
-AR parameter: Panel-specific                Asymptotics: T -> Infinity
-Panel means:  Included
-Time trend:   Included
-Drift term:   Not included                  ADF regressions: 4 lags
-------------------------------------------------------------------------------
-                                  Statistic      p-value
-------------------------------------------------------------------------------
- Inverse chi-squared(246)  P       549.6200       0.0000
- Inverse normal            Z        -9.7332       0.0000
- Inverse logit t(614)      L*      -10.4777       0.0000
- Modified inv. chi-squared Pm       13.6882       0.0000
-------------------------------------------------------------------------------
- P statistic requires number of panels to be finite.
- Other statistics are suitable for finite or infinite number of panels.
-------------------------------------------------------------------------------
-
-Number of gaps in sample = 4
-sample may not contain gaps
-
-Pesaran's CADF test for y_fdi
-Cross-sectional average in first period extracted and extreme t-values truncated
-Deterministics chosen: constant & trend
-panel is unbalanced, only standarized Ztbar statistic can be calculated
-
-Z[t-bar] test, (N,T1-T123) = (123, 51 36 104 108 108 108 64 88 28 108 108 108 80 100 80 108 108 58 108 108 64 20 100 88 108 88 108 40 28 108 40 108 108 76 108 84 108 108 96 40 48 56 104 108 20 68 108 
-> 65 108 108 108 32 108 108 108 36 108 100 104 108 108 108 24 104 76 44 108 108 100 108 72 108 72 108 100 107 56 64 36 88 88 32 108 108 108 83 108 92 108 108 108 84 108 84 36 108 108 60 100 60 88 56 6
-> 4 108 108 108 40 108 76 48 24 108 36 82 108 84 108 64 108 48 48 108 64)
-Obs = 9769    Augmented by 4 lags (average) 
-
-    Z[t-bar]  P-value
-   -7.826    0.000
-
-==== x_terr ====
-
-Im–Pesaran–Shin unit-root test for x_terr
------------------------------------------
-H0: All panels contain unit roots           Number of panels       =    117
-Ha: Some panels are stationary              Avg. number of periods =  85.86
-
-AR parameter: Panel-specific                Asymptotics: T,N -> Infinity
-Panel means:  Included                                        sequentially
-Time trend:   Included                      Cross-sectional means removed
-
-ADF regressions: 4 lags
-------------------------------------------------------------------------------
-                    Statistic      p-value
-------------------------------------------------------------------------------
- W-t-bar             -7.7056        0.0000
-------------------------------------------------------------------------------
-(9,146 missing values generated)
-
-Fisher-type unit-root test for x_terr
-Based on augmented Dickey–Fuller tests
---------------------------------------
-H0: All panels contain unit roots           Number of panels       =    117
-Ha: At least one panel is stationary        Avg. number of periods =  85.86
-
-AR parameter: Panel-specific                Asymptotics: T -> Infinity
-Panel means:  Included
-Time trend:   Included
-Drift term:   Not included                  ADF regressions: 4 lags
-------------------------------------------------------------------------------
-                                  Statistic      p-value
-------------------------------------------------------------------------------
- Inverse chi-squared(234)  P       726.4465       0.0000
- Inverse normal            Z       -13.5757       0.0000
- Inverse logit t(584)      L*      -16.4094       0.0000
- Modified inv. chi-squared Pm       22.7633       0.0000
-------------------------------------------------------------------------------
- P statistic requires number of panels to be finite.
- Other statistics are suitable for finite or infinite number of panels.
-------------------------------------------------------------------------------
-
-Number of gaps in sample = 4
-sample may not contain gaps
-
-Pesaran's CADF test for x_terr
-Cross-sectional average in first period extracted and extreme t-values truncated
-Deterministics chosen: constant & trend
-panel is unbalanced, only standarized Ztbar statistic can be calculated
-
-Z[t-bar] test, (N,T1-T117) = (117, 51 36 104 108 108 108 64 88 28 108 108 108 80 100 80 108 108 58 108 108 64 20 100 88 108 88 108 40 28 108 40 108 108 76 108 84 108 108 96 40 48 104 108 20 68 108 65 
-> 108 108 108 32 108 108 108 36 108 100 104 108 108 108 24 104 76 44 108 108 100 108 72 108 72 108 100 107 56 64 36 88 88 32 108 108 108 83 108 92 108 108 108 84 108 84 36 108 108 60 100 56 108 108 10
-> 8 108 76 24 108 36 82 108 84 108 64 108 48 48 108 64)
-Obs = 9443    Augmented by 4 lags (average) 
-
-    Z[t-bar]  P-value
-  -12.162    0.000
-
-==== d_y_fdi ====
-
-Im–Pesaran–Shin unit-root test for d_y_fdi
-------------------------------------------
-H0: All panels contain unit roots           Number of panels       =    123
-Ha: Some panels are stationary              Avg. number of periods =  83.54
-
-AR parameter: Panel-specific                Asymptotics: T,N -> Infinity
-Panel means:  Included                                        sequentially
-Time trend:   Included                      Cross-sectional means removed
-
-ADF regressions: 4 lags
-------------------------------------------------------------------------------
-                    Statistic      p-value
-------------------------------------------------------------------------------
- W-t-bar            -47.4144        0.0000
-------------------------------------------------------------------------------
-(9,273 missing values generated)
-
-Fisher-type unit-root test for d_y_fdi
-Based on augmented Dickey–Fuller tests
---------------------------------------
-H0: All panels contain unit roots           Number of panels       =    123
-Ha: At least one panel is stationary        Avg. number of periods =  83.54
-
-AR parameter: Panel-specific                Asymptotics: T -> Infinity
-Panel means:  Included
-Time trend:   Included
-Drift term:   Not included                  ADF regressions: 4 lags
-------------------------------------------------------------------------------
-                                  Statistic      p-value
-------------------------------------------------------------------------------
- Inverse chi-squared(246)  P      2828.8175       0.0000
- Inverse normal            Z       -43.6099       0.0000
- Inverse logit t(619)      L*      -69.9147       0.0000
- Modified inv. chi-squared Pm      116.4424       0.0000
-------------------------------------------------------------------------------
- P statistic requires number of panels to be finite.
- Other statistics are suitable for finite or infinite number of panels.
-------------------------------------------------------------------------------
-
-Number of gaps in sample = 4
-sample may not contain gaps
-
-Pesaran's CADF test for d_y_fdi
-Cross-sectional average in first period extracted and extreme t-values truncated
-Deterministics chosen: constant & trend
-panel is unbalanced, only standarized Ztbar statistic can be calculated
-
-Z[t-bar] test, (N,T1-T123) = (123, 50 35 103 107 107 107 63 87 27 107 107 107 79 99 79 107 107 57 107 107 63 19 99 87 107 87 107 39 27 107 39 107 107 74 107 83 107 107 95 39 47 55 102 107 19 67 107 64
->  107 107 107 31 107 107 107 35 107 99 103 107 107 107 23 102 75 43 107 107 99 107 71 107 71 107 99 106 55 63 35 87 87 30 107 107 107 82 107 91 107 107 107 83 107 83 35 107 107 59 99 59 87 55 63 107 
-> 107 107 39 107 75 47 23 107 35 81 107 83 107 63 107 47 47 107 63)
-Obs = 9644    Augmented by 4 lags (average) 
-
-    Z[t-bar]  P-value
-  -37.112    0.000
-
-==== d_x_terr ====
-
-Im–Pesaran–Shin unit-root test for d_x_terr
--------------------------------------------
-H0: All panels contain unit roots           Number of panels       =    117
-Ha: Some panels are stationary              Avg. number of periods =  84.83
-
-AR parameter: Panel-specific                Asymptotics: T,N -> Infinity
-Panel means:  Included                                        sequentially
-Time trend:   Included                      Cross-sectional means removed
-
-ADF regressions: 4 lags
-------------------------------------------------------------------------------
-                    Statistic      p-value
-------------------------------------------------------------------------------
- W-t-bar            -47.3512        0.0000
-------------------------------------------------------------------------------
-(9,273 missing values generated)
-
-Fisher-type unit-root test for d_x_terr
-Based on augmented Dickey–Fuller tests
----------------------------------------
-H0: All panels contain unit roots           Number of panels       =    117
-Ha: At least one panel is stationary        Avg. number of periods =  84.83
-
-AR parameter: Panel-specific                Asymptotics: T -> Infinity
-Panel means:  Included
-Time trend:   Included
-Drift term:   Not included                  ADF regressions: 4 lags
-------------------------------------------------------------------------------
-                                  Statistic      p-value
-------------------------------------------------------------------------------
- Inverse chi-squared(234)  P      3171.5904       0.0000
- Inverse normal            Z       -47.0425       0.0000
- Inverse logit t(589)      L*      -80.6319       0.0000
- Modified inv. chi-squared Pm      135.7902       0.0000
-------------------------------------------------------------------------------
- P statistic requires number of panels to be finite.
- Other statistics are suitable for finite or infinite number of panels.
-------------------------------------------------------------------------------
-
-Number of gaps in sample = 4
-sample may not contain gaps
-
-Pesaran's CADF test for d_x_terr
-Cross-sectional average in first period extracted and extreme t-values truncated
-Deterministics chosen: constant & trend
-panel is unbalanced, only standarized Ztbar statistic can be calculated
-
-Z[t-bar] test, (N,T1-T117) = (117, 50 35 103 107 107 107 63 87 27 107 107 107 79 99 79 107 107 57 107 107 63 19 99 87 107 87 107 39 27 107 39 107 107 74 107 83 107 107 95 39 47 102 107 19 67 107 64 10
-> 7 107 107 31 107 107 107 35 107 99 103 107 107 107 23 102 75 43 107 107 99 107 71 107 71 107 99 106 55 63 35 87 87 30 107 107 107 82 107 91 107 107 107 83 107 83 35 107 107 59 99 55 107 107 107 107 
-> 75 23 107 35 81 107 83 107 63 107 47 47 107 63)
-Obs = 9324    Augmented by 4 lags (average) 
-
-    Z[t-bar]  P-value
-  -38.587    0.000
-
 . 
 . postclose urpost
-
 . 
 . preserve
-
 .     use "$TABLES/diag_unitroot_${TAG}.dta", clear
-
 .     di as txt _n "{hline 78}"
-
-------------------------------------------------------------------------------
-
 .     di as txt "Unit root summary"
-Unit root summary
-
 .     di as txt "{hline 78}"
-------------------------------------------------------------------------------
-
 .     list, noobs sepby(variable)
-
-  +----------------------------------------------------+
-  | variable     test   trend         stat        pval |
-  |----------------------------------------------------|
-  |    y_fdi      IPS   trend            .           . |
-  |    y_fdi   Fisher   trend   -9.7331735   1.088e-22 |
-  |    y_fdi     CIPS   trend   -2.9522301           . |
-  |----------------------------------------------------|
-  |   x_terr      IPS   trend            .           . |
-  |   x_terr   Fisher   trend   -13.575711   2.790e-42 |
-  |   x_terr     CIPS   trend   -3.3081362           . |
-  |----------------------------------------------------|
-  |  d_y_fdi      IPS   trend            .           . |
-  |  d_y_fdi   Fisher   trend   -43.609933           0 |
-  |  d_y_fdi     CIPS   trend   -5.2019726           . |
-  |----------------------------------------------------|
-  | d_x_terr      IPS   trend            .           . |
-  | d_x_terr   Fisher   trend   -47.042492           0 |
-  | d_x_terr     CIPS   trend   -5.3880886           . |
-  +----------------------------------------------------+
-
 .     export delimited using "$TABLES/diag_unitroot_${TAG}.csv", replace
-file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/diag_unitroot_attacks_total_fdi_in_pct_qgdp_core.csv saved
-
 . restore
-
 . 
 . di as txt _n "{hline 78}"
-
-------------------------------------------------------------------------------
-
 . di as txt "How to read this"
-How to read this
-
 . di as txt "{hline 78}"
-------------------------------------------------------------------------------
-
 . di as txt "1. CD rejects independence, so base the integration decision on"
-1. CD rejects independence, so base the integration decision on
-
 . di as txt "   CIPS rather than on IPS or Fisher."
-   CIPS rather than on IPS or Fisher.
-
 . di as txt "2. CIPS reports a t-bar statistic. Compare it with the Pesaran"
-2. CIPS reports a t-bar statistic. Compare it with the Pesaran
-
 . di as txt "   (2007) critical values printed by pescadf. More negative than"
-   (2007) critical values printed by pescadf. More negative than
-
 . di as txt "   the critical value means a unit root is rejected."
-   the critical value means a unit root is rejected.
-
 . di as txt "3. If a level series carries a unit root but its first difference"
-3. If a level series carries a unit root but its first difference
-
 . di as txt "   does not, that variable enters the PVAR in differences."
-   does not, that variable enters the PVAR in differences.
-
 . di as txt "4. Because CD* still rejects after removing principal components,"
-4. Because CD* still rejects after removing principal components,
-
 . di as txt "   the dependence is multi-factor. CIPS corrects for one factor,"
-   the dependence is multi-factor. CIPS corrects for one factor,
-
 . di as txt "   so treat its verdict as indicative and report the td / no-td"
-   so treat its verdict as indicative and report the td / no-td
-
 . di as txt "   comparison in part 3 as a required robustness check."
-   comparison in part 3 as a required robustness check.
+. }
 
-. 
 . 
 . *==============================================================================*
 . * 8. SAVE THE WORKING FILE FOR PART 2
@@ -1170,5 +760,5 @@ Tag for this configuration: attacks_total_fdi_in_pct_qgdp_core
       name:  <unnamed>
        log:  C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/logs/pvar_q_01_attacks_total_fdi_in_pct_qgdp_core.log
   log type:  text
- closed on:  19 Aug 2026, 12:27:38
+ closed on:  24 Aug 2026, 10:39:06
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

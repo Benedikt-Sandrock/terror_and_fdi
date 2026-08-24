@@ -47,10 +47,12 @@ cap mkdir "$TABLES"
 * 1. SWITCHES
 *==============================================================================*
 
+*--- 0. Run diagnostics ------------------------------------------------------*
+* CSD and Unit-Root-Tests are only conducdet if RUN_DIAGNOSTICS == 1
+global RUN_DIAGNOSTICS 0
+
 *--- 1a. FDI variable --------------------------------------------------------*
-* fdi_in_pct_qgdp	inflow, % of quarterly GDP
-* fdi_net_pct_qgdp	net inflow, % of quarterly GDP		(6% fewer obs)
-* fdi_in_pc_usd		inflow per capita, USD
+* fdi_in_pct_qgdp | fdi_net_pct_qgdp | fdi_in_pc_usd
 global FDIRAW      "fdi_in_pct_qgdp"
 
 *--- 1b. Terror variable -----------------------------------------------------*
@@ -60,23 +62,14 @@ global FDIRAW      "fdi_in_pct_qgdp"
 * successful_total fatalities_total fatalities_top3 casualties_total
 global TERRORRAW   "attacks_total"
 
-*--- 1c. Terror scaling: -----------------------------------------------------*
-* raw    : counts as reported
-* permil : counts per million inhabitants (uses pop_lag)
+*--- 1c. Terror scaling: raw | permil ----------------------------------------*
 global TERRORSCALE "raw"
 
-*--- 1d. Terror smoothing: ---------------------------------------------------*
-* none : quarterly count
-* ma4  : rolling 4-quarter sum. Use this for sparse variables such as
-*        business_target_top3 (93% zeros at quarterly frequency).
+*--- 1d. Terror smoothing: none | ma4 ----------------------------------------*
 global TERRORSMOOTH "none"
 
-*--- 1e. Sample: -------------------------------------------------------------*
-* full   : FDI observed and lagged GDP available
-* nospe  : full, minus conduit economies
-* core   : full, minus conduit economies and distorted-FX economies (default)
-* terror : core, restricted to countries with at least one nonzero terror event
-global SAMPLE      "core"
+*--- 1e. Sample: full | nospe | core | terror --------------------------------*
+global SAMPLE      "terror"
 
 *--- 1f. Minimum series length per country -----------------------------------*
 global MINOBS      20
@@ -85,8 +78,8 @@ global MINOBS      20
 global WINSOR      1
 
 *--- 1h. Unit-root options ---------------------------------------------------*
-global URLAGS      4		// lags in the unit-root regressions
-global URTREND     "trend"	// "trend" or "" (see discussion in part 2)
+global URLAGS      4
+global URTREND     "trend"
 
 *--- 1i. Run tag -------------------------------------------------------------*
 global TAG "${TERRORRAW}_${FDIRAW}_${SAMPLE}"
@@ -309,6 +302,8 @@ restore
 * Run on the RAW (non-demeaned) series: time demeaning is a model
 * specification for robustness, not a preprocessing step.
 
+if $RUN_DIAGNOSTICS == 1 {
+
 capture postclose cdpost
 postfile cdpost str12 variable double(cd cd_p cdw cdw_p cdwp cdwp_p cdstar cdstar_p) ///
     using "$TABLES/diag_cd_${TAG}.dta", replace
@@ -527,7 +522,7 @@ di as txt "4. Because CD* still rejects after removing principal components,"
 di as txt "   the dependence is multi-factor. CIPS corrects for one factor,"
 di as txt "   so treat its verdict as indicative and report the td / no-td"
 di as txt "   comparison in part 3 as a required robustness check."
-
+}
 
 *==============================================================================*
 * 8. SAVE THE WORKING FILE FOR PART 2

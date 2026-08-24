@@ -2,7 +2,7 @@
       name:  <unnamed>
        log:  C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/logs/pvar_q_02b_v2_attacks_total_fdi_in_pct_qgdp_core_min28.log
   log type:  text
- opened on:  19 Aug 2026, 14:56:17
+ opened on:  24 Aug 2026, 10:28:16
 
 . 
 . 
@@ -120,7 +120,7 @@ Base sample:  10,314 obs, 119 countries
 .     tempfile groups
 
 .     save `groups'
-file C:\Users\Benedikt\AppData\Local\Temp\ST_3df8_000002.tmp saved as .dta format
+file C:\Users\Benedikt\AppData\Local\Temp\ST_33fc_000002.tmp saved as .dta format
 
 . restore
 
@@ -598,7 +598,6 @@ C2. Poolability and Mean Group, FDI equation, lags 5
 .     capture postclose dD
 .     postfile dD int cid double(b_terr1 b_own1 nobs) ///
 >         using "$TABLES/diagJ_heterogeneity_${TAG}.dta", replace
-(file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/diagJ_heterogeneity_attacks_total_fdi_in_pct_qgdp_core_min28.dta not found)
 . 
 .     foreach i of local longids {
   2.         cap qui reg y_fdi L(1/$REFLAG).y_fdi L(1/$REFLAG).$HETVAR `SEAS' ///
@@ -690,7 +689,6 @@ C2. Poolability and Mean Group, FDI equation, lags 5
   heterogeneity bias, not noise.
 . 
 .         export delimited using "$TABLES/diagJ_heterogeneity_${TAG}.csv", replace
-(file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/diagJ_heterogeneity_attacks_total_fdi_in_pct_qgdp_core_min28.csv not found)
 file C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/tables/diagJ_heterogeneity_attacks_total_fdi_in_pct_qgdp_core_min28.csv saved
 .     restore
 . }
@@ -760,5 +758,5 @@ What this run adds
       name:  <unnamed>
        log:  C:/Users/Benedikt/PycharmProjects/terror_and_fdi/output/logs/pvar_q_02b_v2_attacks_total_fdi_in_pct_qgdp_core_min28.log
   log type:  text
- closed on:  19 Aug 2026, 14:58:10
+ closed on:  24 Aug 2026, 10:31:20
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

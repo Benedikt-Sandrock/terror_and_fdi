@@ -40,6 +40,8 @@ OUTPUT_DTA = PROCESSED / "fdi_gtd_quarterly_scaled.dta"
 DIAGNOSTICS_CSV = PROCESSED / "fdi_gtd_quarterly_scaled_diagnostics.csv"
 COVERAGE_CSV = PROCESSED / "fdi_gtd_quarterly_scaled_coverage.csv"
 
+INCOME_CLASSIFICATION_PATH = INTERIM / "country_metadata_processed.csv"
+
 WRITE_STATA = True
 
 # FDI variables are reported in millions of USD, GDP in USD.
@@ -262,6 +264,10 @@ def main() -> None:
 
     diagnostics = build_diagnostics(merged)
     coverage = build_coverage(merged)
+
+    income_class = pd.read_csv(INCOME_CLASSIFICATION_PATH)
+
+    merged = pd.merge(merged, income_class, how="left", on="ISO3")
 
     print(diagnostics.to_string(index=False))
     worst = coverage.loc[coverage["quarters_lost"] > 0]
